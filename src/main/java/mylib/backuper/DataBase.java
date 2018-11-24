@@ -6,6 +6,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.PrintStream;
 import java.nio.file.Files;
+import java.nio.file.NoSuchFileException;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.nio.file.attribute.FileTime;
@@ -13,12 +14,14 @@ import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.text.ParseException;
 import java.text.SimpleDateFormat;
+import java.util.Arrays;
 import java.util.Base64;
 import java.util.Date;
 import java.util.HashMap;
 import java.util.LinkedList;
 import java.util.Map;
 import java.util.function.Predicate;
+import java.util.regex.Pattern;
 import java.util.stream.Stream;
 
 public class DataBase implements Closeable
@@ -45,15 +48,21 @@ public class DataBase implements Closeable
       out.println(STDFORMAT.format(new Date())+" INFO  "+str);
     }
 
+    public void info( Exception ex )
+    {
+      System.err.println(ex.getClass().getName()+": "+ex.getMessage());
+      ex.printStackTrace(out);
+    }
+
     public void error( String str )
     {
       System.err.println(str);
       out.println(STDFORMAT.format(new Date())+" ERROR "+str);
     }
 
-    public void exception( Exception ex )
+    public void error( Exception ex )
     {
-      System.err.println(ex.getMessage());
+      ex.printStackTrace();
       ex.printStackTrace(out);
     }
   }
@@ -71,6 +80,7 @@ public class DataBase implements Closeable
   {
     Path rootFolder;
     HashMap<Path,Folder> folders = null;
+    LinkedList<Pattern> ignorePats = new LinkedList<>();
 
     public String toString()
     {
@@ -89,11 +99,18 @@ public class DataBase implements Closeable
 
     public void dump( PrintStream out )
     {
-      for ( Map.Entry<Path,Folder> folder : folders.entrySet() ) {
-	out.println(folder.getKey());
-	for ( Map.Entry<String,File> fileent : folder.getValue().files.entrySet() ) {
-	  File file = fileent.getValue();
-	  out.println(file.hashValue+'\t'+STDFORMAT.format(new Date(file.lastModified))+'\t'+file.length+'\t'+fileent.getKey());
+      Path parray[] = new Path[folders.size()];
+      parray = folders.keySet().toArray(parray);
+      Arrays.sort(parray);
+      for ( Path path : parray ) {
+	out.println(path);
+	Folder folder = folders.get(path);
+	String farray[] = new String[folder.files.size()];
+	farray = folder.files.keySet().toArray(farray);
+	Arrays.sort(farray);
+	for ( String name : farray ) {
+	  File file = folder.files.get(name);
+	  out.println(file.hashValue+'\t'+STDFORMAT.format(new Date(file.lastModified))+'\t'+file.length+'\t'+name);
 	}
       }
     }
@@ -135,12 +152,17 @@ public class DataBase implements Closeable
       try (
 	Stream<String> stream = Files.lines(dbFolder.resolve(CONFIGNAME))
       ) { stream.forEach(list::add); }
+      Storage storage = null;
       for ( String line : list ) {
 	if ( line.length() == 0 || line.startsWith("#") ) return;
 	int idx = line.indexOf('=');
 	if ( idx <= 0 ) {
-	  log.error("No '=' : "+line);
-	  return;
+	  line = line.replaceAll("\\.","\\\\.");
+	  line = line.replaceAll("\\*\\*",".+");
+	  line = line.replaceAll("\\*","[^/]+");
+	  if ( line.charAt(line.length()-1) == '/' ) line = line.substring(0,line.length()-1)+".*";
+	  storage.ignorePats.add(Pattern.compile(line));
+	  continue;
 	}
 	String key = line.substring(0,idx).trim();
 	Path path = Paths.get(line.substring(idx+1).trim());
@@ -148,13 +170,13 @@ public class DataBase implements Closeable
 	  log.error("Not Absolute Path : "+line);
 	  return;
 	}
-	Storage storage = new Storage();
+	storage = new Storage();
 	storage.rootFolder = path;
 	storageMap.put(key,storage);
 	log.info("Read Config "+key+"="+path);
       }
     } catch ( IOException ex ) {
-      log.exception(ex);
+      log.error(ex);
     }
   }
 
@@ -169,9 +191,13 @@ public class DataBase implements Closeable
     }
 
     LinkedList<String> list = new LinkedList<>();
-    try (
-      Stream<String> stream = Files.lines(dbFolder.resolve(storageName+".db"))
-    ) { stream.forEach(list::add); }
+    try {
+      try (
+	Stream<String> stream = Files.lines(dbFolder.resolve(storageName+".db"))
+      ) { stream.forEach(list::add); }
+    } catch ( NoSuchFileException ex ) {
+      log.info(ex);
+    }
     storage.folders = new HashMap<Path,Folder>();
     Folder folder = null;
     for ( String line : list ) {
@@ -212,13 +238,25 @@ public class DataBase implements Closeable
     HashMap<Path,Folder> origFolders = storage.folders;
     storage.folders = new HashMap<Path,Folder>();
     LinkedList<Path> list = new LinkedList<>();
-    try (
-      Stream<Path> stream = Files.walk(storage.rootFolder)
-    ) { stream.filter(x -> !Files.isDirectory(x)).forEach(list::add); }
+    try ( Stream<Path> stream = Files.walk(storage.rootFolder) )
+    {
+      stream
+	.filter(path -> {
+	    if ( Files.isDirectory(path) ) return false;
+	    for ( Pattern pat : storage.ignorePats ) {
+	      String str = storage.rootFolder.relativize(path).toString();
+	      if ( pat.matcher(str).matches() ) return false;
+	    }
+	    return true;
+	  })
+	.forEach(list::add);
+    }
     for ( Path path : list ) {
       Path reltiv = storage.rootFolder.relativize(path);
       Path parent = reltiv.getParent();
+      if ( parent == null ) parent = Paths.get(".");
       String name = reltiv.getFileName().toString();
+      //System.err.println("reltiv = "+reltiv+' '+parent+' '+name);
       Folder folder = null;
       File origfile = null;
       File newfile = new File();
