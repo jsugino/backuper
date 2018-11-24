@@ -31,9 +31,13 @@ public class DataBase implements Closeable
     PrintStream out;
 
     public Logger()
-    throws IOException
     {
-      this.out = new PrintStream(Files.newOutputStream(dbFolder.resolve("backup.log"),CREATE,APPEND));
+      try {
+	this.out = new PrintStream(Files.newOutputStream(dbFolder.resolve("backup.log"),CREATE,APPEND));
+	info("Start Logging");
+      } catch ( IOException ex ) {
+	ex.printStackTrace();
+      }
     }
 
     public void info( String str )
@@ -46,10 +50,17 @@ public class DataBase implements Closeable
       System.err.println(str);
       out.println(STDFORMAT.format(new Date())+" ERROR "+str);
     }
+
+    public void exception( Exception ex )
+    {
+      System.err.println(ex.getMessage());
+      ex.printStackTrace(out);
+    }
   }
 
   public void close()
   {
+    log.info("Stop Logging");
     log.out.close();
   }
 
@@ -108,43 +119,50 @@ public class DataBase implements Closeable
   public MessageDigest digest;
 
   public DataBase( Path dbFolder )
-  throws IOException
   {
     this.dbFolder = dbFolder;
     this.log = new Logger();
-    this.storageMap = new HashMap<>();
+    log.info("Initialize DataBase "+dbFolder+'/'+CONFIGNAME);
+
     try {
-      digest = MessageDigest.getInstance("MD5");
-    } catch ( NoSuchAlgorithmException ex ) {
-      throw new IOException("Cannot initialize 'digest MD5'",ex);
-    }
-    LinkedList<String> list = new LinkedList<>();
-    try (
-      Stream<String> stream = Files.lines(dbFolder.resolve(CONFIGNAME))
-    ) { stream.forEach(list::add); }
-    for ( String line : list ) {
-      if ( line.length() == 0 || line.startsWith("#") ) return;
-      int idx = line.indexOf('=');
-      if ( idx <= 0 ) {
-	log.error("No '=' : "+line);
-	return;
+      this.storageMap = new HashMap<>();
+      try {
+	digest = MessageDigest.getInstance("MD5");
+      } catch ( NoSuchAlgorithmException ex ) {
+	throw new IOException("Cannot initialize 'digest MD5'",ex);
       }
-      String key = line.substring(0,idx).trim();
-      Path path = Paths.get(line.substring(idx+1).trim());
-      if ( !path.isAbsolute() ) {
-	log.error("Not Absolute Path : "+line);
-	return;
+      LinkedList<String> list = new LinkedList<>();
+      try (
+	Stream<String> stream = Files.lines(dbFolder.resolve(CONFIGNAME))
+      ) { stream.forEach(list::add); }
+      for ( String line : list ) {
+	if ( line.length() == 0 || line.startsWith("#") ) return;
+	int idx = line.indexOf('=');
+	if ( idx <= 0 ) {
+	  log.error("No '=' : "+line);
+	  return;
+	}
+	String key = line.substring(0,idx).trim();
+	Path path = Paths.get(line.substring(idx+1).trim());
+	if ( !path.isAbsolute() ) {
+	  log.error("Not Absolute Path : "+line);
+	  return;
+	}
+	Storage storage = new Storage();
+	storage.rootFolder = path;
+	storageMap.put(key,storage);
+	log.info("Read Config "+key+"="+path);
       }
-      Storage storage = new Storage();
-      storage.rootFolder = path;
-      storageMap.put(key,storage);
-      log.info("read config "+key+"="+path);
+    } catch ( IOException ex ) {
+      log.exception(ex);
     }
   }
 
   public void readDB( String storageName )
   throws IOException
   {
+    log.info("Read DataBase "+storageName);
+
     Storage storage = storageMap.get(storageName);
     if ( storage == null ) {
       throw new IOException("Illegal Storage Name : "+storageName);
@@ -172,7 +190,7 @@ public class DataBase implements Closeable
 	try {
 	  file.lastModified = STDFORMAT.parse(line.substring(i1+1,i2)).getTime();
 	} catch ( ParseException ex ) {
-	  log.error("Cannot parse time : "+line);
+	  log.error("Cannot Parse Time : "+line);
 	  file.lastModified = 0L;
 	}
 	file.length = Long.parseLong(line.substring(i2+1,i3));
@@ -184,6 +202,8 @@ public class DataBase implements Closeable
   public void scanFolder( String storageName )
   throws IOException
   {
+    log.info("Scan Folder "+storageName);
+
     Storage storage = storageMap.get(storageName);
     if ( storage == null ) {
       throw new IOException("Illegal Storage Name : "+storageName);
@@ -207,7 +227,7 @@ public class DataBase implements Closeable
 	storage.folders.put(parent,folder);
       }
       if ( folder.files.get(name) != null ) {
-	log.error("duplicate : "+path);
+	log.error("Duplicate : "+path);
 	return;
       }
       folder.files.put(name,newfile);
@@ -222,7 +242,6 @@ public class DataBase implements Closeable
 	newfile.hashValue = origfile.hashValue;
       } else {
 	newfile.hashValue = getMD5(path);
-	log.info("calculate MD5 "+path);
       }
     }
   }
@@ -230,6 +249,8 @@ public class DataBase implements Closeable
   public void writeDB( String storageName )
   throws IOException
   {
+    log.info("Write DataBase "+storageName);
+
     Storage storage = storageMap.get(storageName);
     if ( storage == null ) {
       throw new IOException("Illegal Storage Name : "+storageName);
@@ -243,6 +264,8 @@ public class DataBase implements Closeable
   public String getMD5( Path path )
   throws IOException
   {
+    log.info("Calculate MD5 "+path);
+
     digest.reset();
     try ( InputStream in = Files.newInputStream(path) )
     {

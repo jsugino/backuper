@@ -11,19 +11,21 @@ public class Backuper
 
     try ( DataBase db = new DataBase(Paths.get(arg[0])) )
     {
-      db.readDB(arg[1]);
-      db.storageMap.get(arg[1]).dump(System.out);
-      db.scanFolder(arg[1]);
-      db.storageMap.get(arg[1]).dump(System.out);
-      db.writeDB(arg[1]);
+      try {
+	db.readDB(arg[1]);
+	db.storageMap.get(arg[1]).dump(System.out);
+	db.scanFolder(arg[1]);
+	db.storageMap.get(arg[1]).dump(System.out);
+	db.writeDB(arg[1]);
 
-      db.readDB(arg[2]);
-      db.storageMap.get(arg[2]).dump(System.out);
-      db.scanFolder(arg[2]);
-      db.storageMap.get(arg[2]).dump(System.out);
-      db.writeDB(arg[2]);
-    } catch ( Exception ex ) {
-      ex.printStackTrace();
+	db.readDB(arg[2]);
+	db.storageMap.get(arg[2]).dump(System.out);
+	db.scanFolder(arg[2]);
+	db.storageMap.get(arg[2]).dump(System.out);
+	db.writeDB(arg[2]);
+      } catch ( Exception ex ) {
+	db.log.exception(ex);
+      }
     }
   }
 
