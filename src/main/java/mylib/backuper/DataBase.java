@@ -1,5 +1,7 @@
 package mylib.backuper;
 
+import static java.nio.file.StandardOpenOption.*;
+import java.io.Closeable;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.PrintStream;
@@ -19,11 +21,41 @@ import java.util.Map;
 import java.util.function.Predicate;
 import java.util.stream.Stream;
 
-public class DataBase
+public class DataBase implements Closeable
 {
-  public static SimpleDateFormat STDFORMAT = new SimpleDateFormat("yyyy/MM/dd HH:mm:ss.SSS");
+  // ======================================================================
+  public Logger log;
+
+  public class Logger
+  {
+    PrintStream out;
+
+    public Logger()
+    throws IOException
+    {
+      this.out = new PrintStream(Files.newOutputStream(dbFolder.resolve("backup.log"),CREATE,APPEND));
+    }
+
+    public void info( String str )
+    {
+      out.println(STDFORMAT.format(new Date())+" INFO  "+str);
+    }
+
+    public void error( String str )
+    {
+      System.err.println(str);
+      out.println(STDFORMAT.format(new Date())+" ERROR "+str);
+    }
+  }
+
+  public void close()
+  {
+    log.out.close();
+  }
 
   // ======================================================================
+  public static SimpleDateFormat STDFORMAT = new SimpleDateFormat("yyyy/MM/dd HH:mm:ss.SSS");
+
   public static class Storage
   {
     Path rootFolder;
@@ -79,6 +111,7 @@ public class DataBase
   throws IOException
   {
     this.dbFolder = dbFolder;
+    this.log = new Logger();
     this.storageMap = new HashMap<>();
     try {
       digest = MessageDigest.getInstance("MD5");
@@ -93,18 +126,19 @@ public class DataBase
       if ( line.length() == 0 || line.startsWith("#") ) return;
       int idx = line.indexOf('=');
       if ( idx <= 0 ) {
-	System.err.println("No '=' : "+line);
+	log.error("No '=' : "+line);
 	return;
       }
       String key = line.substring(0,idx).trim();
       Path path = Paths.get(line.substring(idx+1).trim());
       if ( !path.isAbsolute() ) {
-	System.err.println("Not Absolute Path : "+line);
+	log.error("Not Absolute Path : "+line);
 	return;
       }
       Storage storage = new Storage();
       storage.rootFolder = path;
       storageMap.put(key,storage);
+      log.info("read config "+key+"="+path);
     }
   }
 
@@ -138,7 +172,7 @@ public class DataBase
 	try {
 	  file.lastModified = STDFORMAT.parse(line.substring(i1+1,i2)).getTime();
 	} catch ( ParseException ex ) {
-	  System.err.println("Cannot parse time : "+line);
+	  log.error("Cannot parse time : "+line);
 	  file.lastModified = 0L;
 	}
 	file.length = Long.parseLong(line.substring(i2+1,i3));
@@ -173,7 +207,7 @@ public class DataBase
 	storage.folders.put(parent,folder);
       }
       if ( folder.files.get(name) != null ) {
-	System.err.println("duplicate : "+path);
+	log.error("duplicate : "+path);
 	return;
       }
       folder.files.put(name,newfile);
@@ -188,7 +222,7 @@ public class DataBase
 	newfile.hashValue = origfile.hashValue;
       } else {
 	newfile.hashValue = getMD5(path);
-	System.err.println("calculate MD5 "+path);
+	log.info("calculate MD5 "+path);
       }
     }
   }
@@ -223,29 +257,4 @@ public class DataBase
     if ( idx > 0 ) str = str.substring(0,idx);
     return str;
   }
-
-  // --------------------------------------------------
-  /*
-  public void update( String storageName )
-  throws IOException
-  {
-    if ( !Files.isDirectory(rootFolder) ) {
-      throw new IllegalArgumentException("Not a folder "+rootFolder);
-    }
-
-    Folder folder = storageMap.get(storageName);
-    if ( folder == null ) {
-      folder = new Folder();
-      folder.name = storageName;
-      storageMap.put(storageName,folder);
-    }
-
-    try ( Stream<Path> stream = Files.walk(rootFolder) )
-    { stream
-	.filter(x -> !Files.isDirectory(x))
-	.map(rootFolder::relativize)
-	.forEach(System.out::println);
-    }
-  }
-  */
 }
