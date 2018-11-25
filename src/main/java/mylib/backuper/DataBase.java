@@ -1,94 +1,205 @@
 package mylib.backuper;
 
-import static java.nio.file.StandardOpenOption.*;
-import java.io.Closeable;
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.OutputStream;
 import java.io.PrintStream;
 import java.nio.file.Files;
 import java.nio.file.NoSuchFileException;
 import java.nio.file.Path;
 import java.nio.file.Paths;
-import java.nio.file.attribute.FileTime;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.text.ParseException;
-import java.text.SimpleDateFormat;
-import java.util.Arrays;
 import java.util.Base64;
 import java.util.Date;
 import java.util.HashMap;
 import java.util.LinkedList;
-import java.util.Map;
-import java.util.function.Predicate;
+import java.util.ListIterator;
 import java.util.regex.Pattern;
 import java.util.stream.Stream;
+import static mylib.backuper.Backuper.log;
+import static mylib.backuper.Backuper.STDFORMAT;
 
-public class DataBase implements Closeable
+public class DataBase extends HashMap<String,DataBase.Storage>
 {
   // ======================================================================
-  public Logger log;
-
-  public class Logger
+  public class Storage
   {
-    PrintStream out;
+    String storageName;
+    Path rootFolder;
+    LinkedList<Folder> folders = null;
+    LinkedList<Pattern> ignorePats = new LinkedList<>();
 
-    public Logger()
+    public Storage( String storageName )
     {
+      this.storageName = storageName;
+    }
+
+    public Folder getFolder( Path path )
+    {
+      Folder folder = find(folders,path);
+      if ( folder == null ) {
+	folder = new Folder(path);
+	register(folders,folder);
+      }
+      return folder;
+    }
+
+    // --------------------------------------------------
+    public void readDB()
+    throws IOException
+    {
+      log.info("Read DataBase "+storageName);
+
+      LinkedList<String> list = new LinkedList<>();
       try {
-	this.out = new PrintStream(Files.newOutputStream(dbFolder.resolve("backup.log"),CREATE,APPEND));
-	info("Start Logging");
-      } catch ( IOException ex ) {
-	ex.printStackTrace();
+	try (
+	  Stream<String> stream = Files.lines(dbFolder.resolve(storageName+".db"))
+	) { stream.forEach(list::add); }
+      } catch ( NoSuchFileException ex ) {
+	log.info(ex);
+      }
+      folders = new LinkedList<Folder>();
+      Folder folder = null;
+      for ( String line : list ) {
+	int i1;
+	if ( (i1 = line.indexOf('\t')) < 0 ) {
+	  folder = new Folder(Paths.get(line));
+	  folders.add(folder);
+	} else {
+	  int i2 = line.indexOf('\t',i1+1);
+	  int i3 = line.indexOf('\t',i2+1);
+	  File file = new File(folder.folderPath.resolve(line.substring(i3+1)));
+	  folder.files.add(file);
+	  log.debug("read "+file.filePath);
+	  file.hashValue = line.substring(0,i1);
+	  try {
+	    file.lastModified = STDFORMAT.parse(line.substring(i1+1,i2)).getTime();
+	  } catch ( ParseException ex ) {
+	    log.error("Cannot Parse Time : "+line);
+	    file.lastModified = 0L;
+	  }
+	  file.length = Long.parseLong(line.substring(i2+1,i3));
+	}
       }
     }
 
-    public void info( String str )
+    public void writeDB()
+    throws IOException
     {
-      out.println(STDFORMAT.format(new Date())+" INFO  "+str);
+      log.info("Write DataBase "+storageName);
+
+      try ( PrintStream out = new PrintStream(Files.newOutputStream(dbFolder.resolve(storageName+".db")))
+      ) { dump(out); }
     }
 
-    public void info( Exception ex )
+    // --------------------------------------------------
+    public void copyFile( Path filePath, Storage dstStorage )
+    throws IOException
     {
-      System.err.println(ex.getClass().getName()+": "+ex.getMessage());
-      ex.printStackTrace(out);
+      Folder srcFolder = find(this.folders,filePath.getParent());
+      File srcFile = find(srcFolder.files,filePath);
+      Folder dstFolder = dstStorage.getFolder(filePath.getParent());
+      File dstFile = find(dstFolder.files,filePath);
+      String command = "copy override ";
+      if ( dstFile == null ) {
+	dstFile = new File(filePath);
+	register(dstFolder.files,dstFile);
+	command = "copy ";
+      }
+      dstFile.hashValue = srcFile.hashValue;
+      dstFile.length = srcFile.length;
+      log.info(command+filePath+" from "+this.rootFolder+" to "+dstStorage.rootFolder);
+      Path dstPath = dstStorage.rootFolder.resolve(dstFile.filePath);
+      try ( 
+	InputStream  in  = Files.newInputStream(rootFolder.resolve(srcFile.filePath));
+	OutputStream out = Files.newOutputStream(dstPath) )
+      {
+	byte buf[] = new byte[1024*64];
+	int len;
+	while ( (len = in.read(buf)) > 0 ) {
+	  out.write(buf,0,len);
+	}
+      }
+      dstFile.lastModified = Files.getLastModifiedTime(dstPath).toMillis();
     }
 
-    public void error( String str )
+    public void deleteFile( Path delPath )
+    throws IOException
     {
-      System.err.println(str);
-      out.println(STDFORMAT.format(new Date())+" ERROR "+str);
+      log.info("delete "+delPath+" from "+this.rootFolder);
+      Files.delete(rootFolder.resolve(delPath));
     }
 
-    public void error( Exception ex )
+    // --------------------------------------------------
+    public void scanFolder()
+    throws IOException
     {
-      ex.printStackTrace();
-      ex.printStackTrace(out);
+      log.info("Scan Folder "+storageName);
+
+      LinkedList<Folder> origFolders = folders;
+      folders = new LinkedList<Folder>();
+      LinkedList<Path> list = new LinkedList<>();
+      try ( Stream<Path> stream = Files.walk(rootFolder) )
+	  {
+	    stream
+	      .filter(path -> {
+		  if ( Files.isDirectory(path) ) return false;
+		  if ( Files.isSymbolicLink(path) ) {
+		    log.info("ignore symbolic link : "+path);
+		    return false;
+		  }
+		  Path rel = rootFolder.relativize(path);
+		  String str = rel.toString();
+		  if ( rel.getParent() == null ) str = "./"+str;
+		  for ( Pattern pat : ignorePats ) {
+		    if ( pat.matcher(str).matches() ) {
+		      log.info("ignore file : "+path);
+		      return false;
+		    }
+		  }
+		  return true;
+		})
+	      .forEach(list::add);
+	  }
+      for ( Path path : list ) {
+	log.debug("scan "+path);
+	Path reltiv = rootFolder.relativize(path);
+	Path parent = reltiv.getParent();
+	if ( parent == null ) {
+	  parent = Paths.get(".");
+	  reltiv = parent.resolve(reltiv);
+	}
+	Folder folder = this.getFolder(parent);
+
+	File newfile = new File(reltiv);
+	register(folder.files,newfile);
+	newfile.length = Files.size(path);
+	newfile.lastModified = Files.getLastModifiedTime(path).toMillis();
+
+	File origfile;
+	if ( origFolders != null &&
+	     (folder = find(origFolders,parent)) != null &&
+	     (origfile = find(folder.files,reltiv)) != null &&
+	     newfile.length == origfile.length &&
+	     newfile.lastModified == origfile.lastModified
+	) {
+	  newfile.hashValue = origfile.hashValue;
+	} else {
+	  newfile.hashValue = getMD5(path);
+	}
+      }
     }
-  }
 
-  public void close()
-  {
-    log.info("Stop Logging");
-    log.out.close();
-  }
-
-  // ======================================================================
-  public static SimpleDateFormat STDFORMAT = new SimpleDateFormat("yyyy/MM/dd HH:mm:ss.SSS");
-
-  public static class Storage
-  {
-    Path rootFolder;
-    HashMap<Path,Folder> folders = null;
-    LinkedList<Pattern> ignorePats = new LinkedList<>();
-
+    // --------------------------------------------------
     public String toString()
     {
       StringBuffer buf = new StringBuffer(rootFolder.toString());
       if ( folders != null ) {
 	buf.append(" (");
 	int cnt = 0;
-	for ( Folder folder : folders.values() ) {
+	for ( Folder folder : folders ) {
 	  cnt += folder.files.size();
 	}
 	buf.append(cnt);
@@ -99,50 +210,95 @@ public class DataBase implements Closeable
 
     public void dump( PrintStream out )
     {
-      Path parray[] = new Path[folders.size()];
-      parray = folders.keySet().toArray(parray);
-      Arrays.sort(parray);
-      for ( Path path : parray ) {
-	out.println(path);
-	Folder folder = folders.get(path);
-	String farray[] = new String[folder.files.size()];
-	farray = folder.files.keySet().toArray(farray);
-	Arrays.sort(farray);
-	for ( String name : farray ) {
-	  File file = folder.files.get(name);
-	  out.println(file.hashValue+'\t'+STDFORMAT.format(new Date(file.lastModified))+'\t'+file.length+'\t'+name);
+      for ( Folder folder : folders ) {
+	out.println(folder.folderPath.toString());
+	for ( File file : folder.files ) {
+	  file.dump(out);
 	}
       }
     }
   }
 
-  public static class Folder
+  public static class Folder implements PathHolder
   {
-    public HashMap<String,File> files = new HashMap<>();
+    public Path folderPath;
+    public LinkedList<File> files = new LinkedList<>();
+
+    public Folder( Path folderPath )
+    {
+      this.folderPath = folderPath;
+    }
+
+    public Path getPath()
+    {
+      return folderPath;
+    }
   }
 
-  public static class File
+  public static class File implements PathHolder
   {
+    public Path filePath;
     public String hashValue;
     public long lastModified;
     public long length;
+
+    public File( Path filePath )
+    {
+      this.filePath = filePath;
+    }
+
+    public Path getPath()
+    {
+      return filePath;
+    }
+
+    public void dump( PrintStream out )
+    {
+      out.println(hashValue+'\t'+STDFORMAT.format(new Date(lastModified))+'\t'+length+'\t'+filePath.getFileName());
+    }
+  }
+
+  public static interface PathHolder
+  {
+    public Path getPath();
+  }
+
+  public static <T extends PathHolder> void register( LinkedList<T> list, T item )
+  {
+    ListIterator<T> itr = list.listIterator();
+    while ( itr.hasNext() ) {
+      int cmp = item.getPath().compareTo(itr.next().getPath());
+      if ( cmp == 0 ) throw new RuntimeException("exist same entry "+item.getPath());
+      if ( cmp < 0 ) {
+	itr.previous();
+	itr.add(item);
+	item = null;
+	break;
+      }
+    }
+    if ( item != null ) list.add(item);
+  }
+
+  public static <T extends PathHolder> T find( LinkedList<T> list, Path path )
+  {
+    for ( T item : list ) {
+      if ( item.getPath().equals(path) ) return item;
+    }
+    return null;
   }
 
   // ======================================================================
   public final static String CONFIGNAME = "folders.conf";
 
   public Path dbFolder;
-  public HashMap<String,Storage> storageMap;
   public MessageDigest digest;
 
   public DataBase( Path dbFolder )
   {
     this.dbFolder = dbFolder;
-    this.log = new Logger();
     log.info("Initialize DataBase "+dbFolder+'/'+CONFIGNAME);
 
     try {
-      this.storageMap = new HashMap<>();
       try {
 	digest = MessageDigest.getInstance("MD5");
       } catch ( NoSuchAlgorithmException ex ) {
@@ -154,14 +310,23 @@ public class DataBase implements Closeable
       ) { stream.forEach(list::add); }
       Storage storage = null;
       for ( String line : list ) {
-	if ( line.length() == 0 || line.startsWith("#") ) return;
+	if ( line.length() == 0 || line.startsWith("##") ) return;
 	int idx = line.indexOf('=');
 	if ( idx <= 0 ) {
-	  line = line.replaceAll("\\.","\\\\.");
-	  line = line.replaceAll("\\*\\*",".+");
-	  line = line.replaceAll("\\*","[^/]+");
-	  if ( line.charAt(line.length()-1) == '/' ) line = line.substring(0,line.length()-1)+".*";
-	  storage.ignorePats.add(Pattern.compile(line));
+	  if ( line.charAt(0) == '/' ) {
+	    line = line.substring(1);
+	    line = line.replaceAll("\\.","\\\\.");
+	    line = line.replaceAll("\\*\\*",".+");
+	    line = line.replaceAll("\\*","[^/]+");
+	  } else {
+	    line = line.replaceAll("\\.","\\\\.");
+	    line = line.replaceAll("\\*","[^/]+");
+	    line = ".*/"+line;
+	  }
+	  if ( line.charAt(line.length()-1) == '/' ) line = line+".*";
+	  Pattern pat = Pattern.compile(line);
+	  log.info("ignore pattern : "+pat);
+	  storage.ignorePats.add(pat);
 	  continue;
 	}
 	String key = line.substring(0,idx).trim();
@@ -170,132 +335,15 @@ public class DataBase implements Closeable
 	  log.error("Not Absolute Path : "+line);
 	  return;
 	}
-	storage = new Storage();
+	storage = new Storage(key);
+	this.put(storage.storageName,storage);
 	storage.rootFolder = path;
-	storageMap.put(key,storage);
+	storage.storageName = key;
 	log.info("Read Config "+key+"="+path);
       }
     } catch ( IOException ex ) {
       log.error(ex);
     }
-  }
-
-  public void readDB( String storageName )
-  throws IOException
-  {
-    log.info("Read DataBase "+storageName);
-
-    Storage storage = storageMap.get(storageName);
-    if ( storage == null ) {
-      throw new IOException("Illegal Storage Name : "+storageName);
-    }
-
-    LinkedList<String> list = new LinkedList<>();
-    try {
-      try (
-	Stream<String> stream = Files.lines(dbFolder.resolve(storageName+".db"))
-      ) { stream.forEach(list::add); }
-    } catch ( NoSuchFileException ex ) {
-      log.info(ex);
-    }
-    storage.folders = new HashMap<Path,Folder>();
-    Folder folder = null;
-    for ( String line : list ) {
-      int i1;
-      if ( (i1 = line.indexOf('\t')) < 0 ) {
-	folder = storage.folders.get(line);
-	if ( folder == null ) {
-	  folder = new Folder();
-	  storage.folders.put(Paths.get(line),folder);
-	}
-      } else {
-	int i2 = line.indexOf('\t',i1+1);
-	int i3 = line.indexOf('\t',i2+1);
-	File file = new File();
-	file.hashValue = line.substring(0,i1);
-	try {
-	  file.lastModified = STDFORMAT.parse(line.substring(i1+1,i2)).getTime();
-	} catch ( ParseException ex ) {
-	  log.error("Cannot Parse Time : "+line);
-	  file.lastModified = 0L;
-	}
-	file.length = Long.parseLong(line.substring(i2+1,i3));
-	folder.files.put(line.substring(i3+1),file);
-      }
-    }
-  }
-
-  public void scanFolder( String storageName )
-  throws IOException
-  {
-    log.info("Scan Folder "+storageName);
-
-    Storage storage = storageMap.get(storageName);
-    if ( storage == null ) {
-      throw new IOException("Illegal Storage Name : "+storageName);
-    }
-
-    HashMap<Path,Folder> origFolders = storage.folders;
-    storage.folders = new HashMap<Path,Folder>();
-    LinkedList<Path> list = new LinkedList<>();
-    try ( Stream<Path> stream = Files.walk(storage.rootFolder) )
-    {
-      stream
-	.filter(path -> {
-	    if ( Files.isDirectory(path) ) return false;
-	    for ( Pattern pat : storage.ignorePats ) {
-	      String str = storage.rootFolder.relativize(path).toString();
-	      if ( pat.matcher(str).matches() ) return false;
-	    }
-	    return true;
-	  })
-	.forEach(list::add);
-    }
-    for ( Path path : list ) {
-      Path reltiv = storage.rootFolder.relativize(path);
-      Path parent = reltiv.getParent();
-      if ( parent == null ) parent = Paths.get(".");
-      String name = reltiv.getFileName().toString();
-      //System.err.println("reltiv = "+reltiv+' '+parent+' '+name);
-      Folder folder = null;
-      File origfile = null;
-      File newfile = new File();
-      if ( (folder = storage.folders.get(parent)) == null ) {
-	folder = new Folder();
-	storage.folders.put(parent,folder);
-      }
-      if ( folder.files.get(name) != null ) {
-	log.error("Duplicate : "+path);
-	return;
-      }
-      folder.files.put(name,newfile);
-      newfile.length = Files.size(path);
-      newfile.lastModified = Files.getLastModifiedTime(path).toMillis();
-      if ( origFolders != null &&
-	   (folder = origFolders.get(parent)) != null &&
-	   (origfile = folder.files.get(name)) != null &&
-	   newfile.length == origfile.length &&
-	   newfile.lastModified == origfile.lastModified
-      ) {
-	newfile.hashValue = origfile.hashValue;
-      } else {
-	newfile.hashValue = getMD5(path);
-      }
-    }
-  }
-
-  public void writeDB( String storageName )
-  throws IOException
-  {
-    log.info("Write DataBase "+storageName);
-
-    Storage storage = storageMap.get(storageName);
-    if ( storage == null ) {
-      throw new IOException("Illegal Storage Name : "+storageName);
-    }
-
-    try ( PrintStream out = new PrintStream(Files.newOutputStream(dbFolder.resolve(storageName+".db")))
-    ) { storage.dump(out); }
   }
 
   // --------------------------------------------------
