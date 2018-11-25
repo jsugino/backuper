@@ -110,8 +110,13 @@ public class DataBase extends HashMap<String,DataBase.Storage>
       }
       dstFile.hashValue = srcFile.hashValue;
       dstFile.length = srcFile.length;
-      log.info(command+filePath+" from "+this.rootFolder+" to "+dstStorage.rootFolder);
+      log.info(command+filePath);
       Path dstPath = dstStorage.rootFolder.resolve(dstFile.filePath);
+      Path dstParent = dstPath.getParent();
+      if ( !Files.isDirectory(dstParent) ) {
+	log.info("mkdir "+dstParent);
+	Files.createDirectories(dstParent);
+      }
       try ( 
 	InputStream  in  = Files.newInputStream(rootFolder.resolve(srcFile.filePath));
 	OutputStream out = Files.newOutputStream(dstPath) )
@@ -128,8 +133,10 @@ public class DataBase extends HashMap<String,DataBase.Storage>
     public void deleteFile( Path delPath )
     throws IOException
     {
-      log.info("delete "+delPath+" from "+this.rootFolder);
+      log.info("delete "+delPath);
       Files.delete(rootFolder.resolve(delPath));
+      Folder folder = find(this.folders,delPath.getParent());
+      delete(folder.files,delPath);
     }
 
     // --------------------------------------------------
@@ -155,7 +162,7 @@ public class DataBase extends HashMap<String,DataBase.Storage>
 		  if ( rel.getParent() == null ) str = "./"+str;
 		  for ( Pattern pat : ignorePats ) {
 		    if ( pat.matcher(str).matches() ) {
-		      log.info("ignore file : "+path);
+		      log.debug("ignore file : "+path);
 		      return false;
 		    }
 		  }
@@ -283,6 +290,19 @@ public class DataBase extends HashMap<String,DataBase.Storage>
   {
     for ( T item : list ) {
       if ( item.getPath().equals(path) ) return item;
+    }
+    return null;
+  }
+
+  public static <T extends PathHolder> T delete( LinkedList<T> list, Path path )
+  {
+    ListIterator<T> itr = list.listIterator();
+    while ( itr.hasNext() ) {
+      T orig;
+      if ( (orig = itr.next()).getPath().equals(path) ) {
+	itr.remove();
+	return orig;
+      }
     }
     return null;
   }

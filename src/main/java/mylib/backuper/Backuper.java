@@ -20,62 +20,88 @@ import static mylib.backuper.DataBase.Folder;
 
 public class Backuper
 {
-  public static void main( String arg[] )
+  public static void main( String argv[] )
   {
-    if ( arg.length < 2 ) { usage(); return; }
-    Path dbFolder = Paths.get(arg[0]);
+    LinkedList<String> args = new LinkedList<>();
+    args.addAll(Arrays.asList(argv));
+
+    String arg;
+    if ( (arg = args.poll()) == null ) { usage(); return; }
+
+    if ( arg.startsWith("-") ) {
+      if ( arg.equals("-d") ) {
+	log.debugMode = true;
+      } else { usage(); return; }
+      if ( (arg = args.poll()) == null ) { usage(); return; }
+    }
+
+    Path dbFolder = Paths.get(arg);
 
     try ( Logger log = new Logger(dbFolder.resolve("backup.log")) )
     {
       Backuper.log = log;
-      DataBase db = new DataBase(dbFolder);
-      Storage srcStorage = db.get(arg[1]);
-      if ( srcStorage == null ) {
-	log.error("Illegal Storage Name : "+arg[1]);
-	return;
-      }
+      try {
+	DataBase db = new DataBase(dbFolder);
 
-      Storage dstStorage = null;
-      if ( arg.length >= 3 ) {
-	dstStorage = db.get(arg[2]);
-	if ( dstStorage == null ) {
-	  log.error("Illegal Storage Name : "+arg[2]);
+	if ( (arg = args.poll()) == null ) { usage(); return; }
+	Storage srcStorage = db.get(arg);
+	if ( srcStorage == null ) {
+	  log.error("Illegal Storage Name : "+arg);
+	  usage();
 	  return;
 	}
-      }
 
-      try {
+	Storage dstStorage = null;
+	if ( (arg = args.poll()) != null ) {
+	  dstStorage = db.get(arg);
+	  if ( dstStorage == null ) {
+	    log.error("Illegal Storage Name : "+args.getFirst());
+	    return;
+	  }
+	}
+
+	System.err.println("[read src DB]");
 	srcStorage.readDB();
+	System.err.println("[scan src Folder]");
 	srcStorage.scanFolder();
+	System.err.println("[write src DB]");
 	srcStorage.writeDB();
 
 	if ( dstStorage == null ) return;
 
+	System.err.println("[read dst DB]");
 	dstStorage.readDB();
+	System.err.println("[scan dst Folder]");
 	dstStorage.scanFolder();
+	System.err.println("[write dst DB]");
+	dstStorage.writeDB();
 
+	System.err.println("[compare]");
 	LinkedList<File> frlist = toFileList(srcStorage);
 	LinkedList<File> tolist = toFileList(dstStorage);
 	LinkedList<File> copylist = compare(frlist,tolist);
 
 	// frlist means "copy"
 	System.err.println("[copy]");
+	log.info("start copy from "+srcStorage.rootFolder+" to "+dstStorage.rootFolder);
 	for ( File file : frlist ) {
-	  file.dump(System.err);
+	  //file.dump(System.err);
 	  srcStorage.copyFile(file.filePath,dstStorage);
 	}
 
 	// copylist means "copy override"
 	System.err.println("[copy override]");
+	log.info("start copy override from "+srcStorage.rootFolder+" to "+dstStorage.rootFolder);
 	for ( File file : copylist ) {
-	  file.dump(System.err);
+	  //file.dump(System.err);
 	  srcStorage.copyFile(file.filePath,dstStorage);
 	}
 
 	// tolist means "delete"
 	System.err.println("[delete]");
+	log.info("start delete from "+dstStorage.rootFolder);
 	for ( File file : tolist ) {
-	  file.dump(System.err);
+	  //file.dump(System.err);
 	  dstStorage.deleteFile(file.filePath);
 	}
 
@@ -153,6 +179,7 @@ public class Backuper
   public static class Logger implements Closeable
   {
     PrintStream out;
+    boolean debugMode = false;
 
     public Logger( Path logPath )
     {
@@ -166,7 +193,7 @@ public class Backuper
 
     public void debug( String str )
     {
-      out.println(STDFORMAT.format(new Date())+" DEBUG "+str);
+      if ( debugMode ) out.println(STDFORMAT.format(new Date())+" DEBUG "+str);
     }
 
     public void info( String str )
