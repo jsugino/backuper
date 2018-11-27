@@ -108,6 +108,13 @@ public class Backuper
 	  dstStorage.deleteFile(file.filePath);
 	}
 
+	// set lastModifed
+	for ( Folder folder : dstStorage.folders ) {
+	  for ( File file : folder.files ) {
+	    dstStorage.setLastModified(file.filePath,srcStorage);
+	  }
+	}
+
 	System.err.println("[clean folder]");
 	dstStorage.cleanupFolder(true);
 	dstStorage.writeDB();

@@ -8,6 +8,7 @@ import java.nio.file.Files;
 import java.nio.file.NoSuchFileException;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.nio.file.attribute.FileTime;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.text.ParseException;
@@ -107,12 +108,13 @@ public class DataBase extends HashMap<String,DataBase.Storage>
     throws IOException
     {
       log.debug("copyFile("+filePath+")");
+      Storage srcStorage = this;
       Path parentPath = filePath.getParent();
       if ( parentPath == null ) parentPath = Paths.get(".");
-      Folder srcFolder = find(this.folders,parentPath);
-      File srcFile = find(srcFolder.files,filePath);
+      Folder srcFolder = find(srcStorage.folders,parentPath);
+      File   srcFile   = find(srcFolder.files,filePath);
       Folder dstFolder = dstStorage.getFolder(parentPath);
-      File dstFile = find(dstFolder.files,filePath);
+      File   dstFile   = find(dstFolder.files,filePath);
       String command = "copy override ";
       if ( dstFile == null ) {
 	dstFile = new File(filePath);
@@ -121,6 +123,7 @@ public class DataBase extends HashMap<String,DataBase.Storage>
       }
       dstFile.hashValue = srcFile.hashValue;
       dstFile.length = srcFile.length;
+      dstFile.lastModified = srcFile.lastModified;
       log.info(command+filePath);
       Path dstPath = dstStorage.rootFolder.resolve(dstFile.filePath);
       Path dstParent = dstPath.getParent();
@@ -138,7 +141,26 @@ public class DataBase extends HashMap<String,DataBase.Storage>
 	  out.write(buf,0,len);
 	}
       }
-      dstFile.lastModified = Files.getLastModifiedTime(dstPath).toMillis();
+      Files.setLastModifiedTime(dstPath,FileTime.fromMillis(dstFile.lastModified));
+    }
+
+    public void setLastModified( Path filePath, Storage srcStorage )
+    throws IOException
+    {
+      Storage dstStorage = this;
+      Path parentPath = filePath.getParent();
+      if ( parentPath == null ) parentPath = Paths.get(".");
+      Folder srcFolder = find(srcStorage.folders,parentPath);
+      File   srcFile   = find(srcFolder.files,filePath);
+      Folder dstFolder = find(dstStorage.folders,parentPath);
+      File   dstFile   = find(dstFolder.files,filePath);
+
+      if ( dstFile.lastModified == srcFile.lastModified ) return;
+
+      log.info("set last modified "+dstFile.filePath);
+      dstFile.lastModified = srcFile.lastModified;
+      Path dstPath = dstStorage.rootFolder.resolve(dstFile.filePath);
+      Files.setLastModifiedTime(dstPath,FileTime.fromMillis(dstFile.lastModified));
     }
 
     public void deleteFile( Path delPath )
