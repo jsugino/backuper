@@ -28,9 +28,10 @@ public class Backuper
     String arg;
     if ( (arg = args.poll()) == null ) { usage(); return; }
 
+    boolean debugMode = false;
     if ( arg.startsWith("-") ) {
       if ( arg.equals("-d") ) {
-	log.debugMode = true;
+	debugMode = true;
       } else { usage(); return; }
       if ( (arg = args.poll()) == null ) { usage(); return; }
     }
@@ -39,6 +40,7 @@ public class Backuper
 
     try ( Logger log = new Logger(dbFolder.resolve("backup.log")) )
     {
+      log.debugMode = debugMode;
       Backuper.log = log;
       try {
 	DataBase db = new DataBase(dbFolder);
@@ -65,6 +67,7 @@ public class Backuper
 	System.err.println("[scan src Folder]");
 	srcStorage.scanFolder();
 	System.err.println("[write src DB]");
+	srcStorage.cleanupFolder(false);
 	srcStorage.writeDB();
 
 	if ( dstStorage == null ) return;
@@ -105,6 +108,8 @@ public class Backuper
 	  dstStorage.deleteFile(file.filePath);
 	}
 
+	System.err.println("[clean folder]");
+	dstStorage.cleanupFolder(true);
 	dstStorage.writeDB();
       } catch ( Exception ex ) {
 	log.error(ex);

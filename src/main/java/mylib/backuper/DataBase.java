@@ -17,6 +17,7 @@ import java.util.HashMap;
 import java.util.LinkedList;
 import java.util.ListIterator;
 import java.util.regex.Pattern;
+import java.util.stream.Collectors;
 import java.util.stream.Stream;
 import static mylib.backuper.Backuper.log;
 import static mylib.backuper.Backuper.STDFORMAT;
@@ -29,7 +30,8 @@ public class DataBase extends HashMap<String,DataBase.Storage>
     String storageName;
     Path rootFolder;
     LinkedList<Folder> folders = null;
-    LinkedList<Pattern> ignorePats = new LinkedList<>();
+    LinkedList<Pattern> ignoreFilePats = new LinkedList<>();
+    LinkedList<Pattern> ignoreFolderPats = new LinkedList<>();
 
     public Storage( String storageName )
     {
@@ -62,15 +64,21 @@ public class DataBase extends HashMap<String,DataBase.Storage>
       }
       folders = new LinkedList<Folder>();
       Folder folder = null;
+      Path curPath = Paths.get(".");
       for ( String line : list ) {
 	int i1;
 	if ( (i1 = line.indexOf('\t')) < 0 ) {
 	  folder = new Folder(Paths.get(line));
+	  log.debug("new Folder("+folder.folderPath+")");
 	  folders.add(folder);
 	} else {
 	  int i2 = line.indexOf('\t',i1+1);
 	  int i3 = line.indexOf('\t',i2+1);
-	  File file = new File(folder.folderPath.resolve(line.substring(i3+1)));
+	  File file = new File(
+	    folder.folderPath.equals(curPath)
+	    ? Paths.get(line.substring(i3+1))
+	    : folder.folderPath.resolve(line.substring(i3+1)));
+	  log.debug("new File("+file.filePath+")");
 	  folder.files.add(file);
 	  log.debug("read "+file.filePath);
 	  file.hashValue = line.substring(0,i1);
@@ -98,9 +106,12 @@ public class DataBase extends HashMap<String,DataBase.Storage>
     public void copyFile( Path filePath, Storage dstStorage )
     throws IOException
     {
-      Folder srcFolder = find(this.folders,filePath.getParent());
+      log.debug("copyFile("+filePath+")");
+      Path parentPath = filePath.getParent();
+      if ( parentPath == null ) parentPath = Paths.get(".");
+      Folder srcFolder = find(this.folders,parentPath);
       File srcFile = find(srcFolder.files,filePath);
-      Folder dstFolder = dstStorage.getFolder(filePath.getParent());
+      Folder dstFolder = dstStorage.getFolder(parentPath);
       File dstFile = find(dstFolder.files,filePath);
       String command = "copy override ";
       if ( dstFile == null ) {
@@ -135,68 +146,109 @@ public class DataBase extends HashMap<String,DataBase.Storage>
     {
       log.info("delete "+delPath);
       Files.delete(rootFolder.resolve(delPath));
-      Folder folder = find(this.folders,delPath.getParent());
+      Path parentPath = delPath.getParent();
+      if ( parentPath == null ) parentPath = Paths.get(".");
+      Folder folder = find(this.folders,parentPath);
       delete(folder.files,delPath);
+    }
+
+    public void cleanupFolder( boolean doRemove )
+    throws IOException
+    {
+      LinkedList<Path> empties = new LinkedList<>();
+      folders = folders.stream()
+	.filter(folder -> {
+	    if ( folder.files.size() != 0 ) return true;
+	    empties.add(folder.folderPath);
+	    return false;
+	  })
+	.collect(Collectors.toCollection(LinkedList::new));
+
+      if ( !doRemove || empties == null ) return;
+
+      for ( Path path : empties.stream()
+	      .sorted((x,y) -> -x.compareTo(y))
+	      .collect(Collectors.toList())
+      ) {
+	Path full = rootFolder.resolve(path);
+	if ( Files.list(full).count() == 0 ) {
+	  log.info("rmdir "+path);
+	  Files.delete(full);
+	}
+      }
     }
 
     // --------------------------------------------------
     public void scanFolder()
     throws IOException
     {
-      log.info("Scan Folder "+storageName);
+      log.info("Scan Folder "+storageName+" "+rootFolder);
 
       LinkedList<Folder> origFolders = folders;
       folders = new LinkedList<Folder>();
-      LinkedList<Path> list = new LinkedList<>();
-      try ( Stream<Path> stream = Files.walk(rootFolder) )
-	  {
-	    stream
-	      .filter(path -> {
-		  if ( Files.isDirectory(path) ) return false;
-		  if ( Files.isSymbolicLink(path) ) {
-		    log.info("ignore symbolic link : "+path);
-		    return false;
-		  }
-		  Path rel = rootFolder.relativize(path);
-		  String str = rel.toString();
-		  if ( rel.getParent() == null ) str = "./"+str;
-		  for ( Pattern pat : ignorePats ) {
-		    if ( pat.matcher(str).matches() ) {
-		      log.debug("ignore file : "+path);
-		      return false;
-		    }
-		  }
-		  return true;
-		})
-	      .forEach(list::add);
-	  }
-      for ( Path path : list ) {
-	log.debug("scan "+path);
-	Path reltiv = rootFolder.relativize(path);
-	Path parent = reltiv.getParent();
-	if ( parent == null ) {
-	  parent = Paths.get(".");
-	  reltiv = parent.resolve(reltiv);
+      LinkedList<Path> folderList = new LinkedList<>();
+      LinkedList<Path> pathList = new LinkedList<>();
+      folderList.add(rootFolder);
+      while ( folderList.size() > 0 ) {
+	Path folderpath = folderList.remove();
+	Path rel = rootFolder.relativize(folderpath);
+	if ( rel.toString().length() == 0 ) rel = Paths.get(".");
+	log.debug("new Folder("+rel+")");
+	Folder folder = new Folder(rel);
+	register(folders,folder);
+	pathList.clear();
+	try ( Stream<Path> stream = Files.list(folderpath) ) {
+	  stream.forEach(pathList::add);
 	}
-	Folder folder = this.getFolder(parent);
-
-	File newfile = new File(reltiv);
-	register(folder.files,newfile);
-	newfile.length = Files.size(path);
-	newfile.lastModified = Files.getLastModifiedTime(path).toMillis();
-
-	File origfile;
-	if ( origFolders != null &&
-	     (folder = find(origFolders,parent)) != null &&
-	     (origfile = find(folder.files,reltiv)) != null &&
-	     newfile.length == origfile.length &&
-	     newfile.lastModified == origfile.lastModified
-	) {
-	  newfile.hashValue = origfile.hashValue;
-	} else {
-	  newfile.hashValue = getMD5(path);
+	nextPath:
+	for ( Path path : pathList ) {
+	  Path relpath = rootFolder.relativize(path);
+	  if ( Files.isSymbolicLink(path) ) {
+	    log.info("ignore symbolic link : "+path);
+	    continue nextPath;
+	  } else if ( Files.isDirectory(path) ) {
+	    log.debug("scan folder "+relpath);
+	    for ( Pattern pat : ignoreFolderPats ) {
+	      if ( pat.matcher(relpath.toString()).matches() ) {
+		log.info("ignore folder "+relpath);
+		continue nextPath;
+	      }
+	    }
+	    folderList.add(path);
+	  } else {
+	    log.debug("scan file "+relpath);
+	    for ( Pattern pat : ignoreFilePats ) {
+	      if ( pat.matcher(relpath.getFileName().toString()).matches() ) {
+		log.info("ignore file "+relpath);
+		continue nextPath;
+	      }
+	    }
+	    log.debug("new File("+relpath+")");
+	    File file = new File(relpath);
+	    register(folder.files,file);
+	    file.length = Files.size(path);
+	    file.lastModified = Files.getLastModifiedTime(path).toMillis();
+	    Folder origfolder = null;
+	    File origfile = null;
+	    if ( 
+	      origFolders != null &&
+	      (origfolder = find(origFolders,folder.folderPath)) != null &&
+	      (origfile = find(origfolder.files,relpath)) != null &&
+	      file.length == origfile.length &&
+	      file.lastModified == origfile.lastModified
+	    ) {
+	      file.hashValue = origfile.hashValue;
+	    } else {
+	      file.hashValue = getMD5(path);
+	    }
+	  }
 	}
       }
+      /*
+      folders = folders.stream()
+	.filter(folder -> folder.files.size() != 0)
+	.collect(Collectors.toCollection(LinkedList::new));
+      */
     }
 
     // --------------------------------------------------
@@ -333,20 +385,31 @@ public class DataBase extends HashMap<String,DataBase.Storage>
 	if ( line.length() == 0 || line.startsWith("##") ) return;
 	int idx = line.indexOf('=');
 	if ( idx <= 0 ) {
-	  if ( line.charAt(0) == '/' ) {
-	    line = line.substring(1);
+	  if ( line.charAt(line.length()-1) == '/' ) {
+	    line = line.substring(0,line.length()-1);
 	    line = line.replaceAll("\\.","\\\\.");
 	    line = line.replaceAll("\\*\\*",".+");
 	    line = line.replaceAll("\\*","[^/]+");
+	    if ( line.charAt(0) == '/' ) {
+	      line = line.substring(1);
+	    } else {
+	      line = "(.+/)?"+line;
+	    }
+	    Pattern pat = Pattern.compile(line);
+	    log.info("ignore folder pattern : "+pat);
+	    storage.ignoreFolderPats.add(pat);
 	  } else {
 	    line = line.replaceAll("\\.","\\\\.");
 	    line = line.replaceAll("\\*","[^/]+");
-	    line = ".*/"+line;
+	    if ( line.charAt(0) == '/' ) {
+	      line = line.substring(1);
+	    } else {
+	      line = "(.+/)?"+line;
+	    }
+	    Pattern pat = Pattern.compile(line);
+	    log.info("ignore file pattern : "+pat);
+	    storage.ignoreFilePats.add(pat);
 	  }
-	  if ( line.charAt(line.length()-1) == '/' ) line = line+".*";
-	  Pattern pat = Pattern.compile(line);
-	  log.info("ignore pattern : "+pat);
-	  storage.ignorePats.add(pat);
 	  continue;
 	}
 	String key = line.substring(0,idx).trim();
