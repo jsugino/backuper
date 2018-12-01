@@ -64,6 +64,7 @@ public class Backuper
 
 	System.err.println("[read src DB]");
 	srcStorage.readDB();
+	System.err.println(srcStorage.storageName+"="+srcStorage.rootFolder);
 	System.err.println("[scan src Folder]");
 	srcStorage.scanFolder();
 	System.err.println("[write src DB]");
@@ -74,6 +75,7 @@ public class Backuper
 
 	System.err.println("[read dst DB]");
 	dstStorage.readDB();
+	System.err.println(dstStorage.storageName+"="+dstStorage.rootFolder);
 	System.err.println("[scan dst Folder]");
 	dstStorage.scanFolder();
 	System.err.println("[write dst DB]");
@@ -206,6 +208,12 @@ public class Backuper
     public void debug( String str )
     {
       if ( debugMode ) out.println(STDFORMAT.format(new Date())+" DEBUG "+str);
+    }
+
+    public void message( String str )
+    {
+      System.err.println(str);
+      out.println(STDFORMAT.format(new Date())+" MSG   "+str);
     }
 
     public void info( String str )

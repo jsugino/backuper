@@ -124,13 +124,13 @@ public class DataBase extends HashMap<String,DataBase.Storage>
       dstFile.hashValue = srcFile.hashValue;
       dstFile.length = srcFile.length;
       dstFile.lastModified = srcFile.lastModified;
-      log.info(command+filePath);
       Path dstPath = dstStorage.rootFolder.resolve(dstFile.filePath);
       Path dstParent = dstPath.getParent();
       if ( !Files.isDirectory(dstParent) ) {
-	log.info("mkdir "+dstParent);
+	log.message("mkdir "+dstFile.filePath.getParent());
 	Files.createDirectories(dstParent);
       }
+      log.message(command+filePath);
       try ( 
 	InputStream  in  = Files.newInputStream(rootFolder.resolve(srcFile.filePath));
 	OutputStream out = Files.newOutputStream(dstPath) )
@@ -166,7 +166,7 @@ public class DataBase extends HashMap<String,DataBase.Storage>
     public void deleteFile( Path delPath )
     throws IOException
     {
-      log.info("delete "+delPath);
+      log.message("delete "+delPath);
       Files.delete(rootFolder.resolve(delPath));
       Path parentPath = delPath.getParent();
       if ( parentPath == null ) parentPath = Paths.get(".");
@@ -194,7 +194,7 @@ public class DataBase extends HashMap<String,DataBase.Storage>
       ) {
 	Path full = rootFolder.resolve(path);
 	if ( Files.list(full).count() == 0 ) {
-	  log.info("rmdir "+path);
+	  log.message("rmdir "+path);
 	  Files.delete(full);
 	}
       }
