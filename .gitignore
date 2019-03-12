@@ -14,4 +14,12 @@
 ## Maven
 ############
 
-/target/
+target
+
+############
+## Eclipse
+############
+
+.project
+.classpath
+.settings

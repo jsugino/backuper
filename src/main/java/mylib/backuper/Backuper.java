@@ -62,68 +62,75 @@ public class Backuper
 	  }
 	}
 
-	System.err.println("[read src DB]");
-	srcStorage.readDB();
-	System.err.println(srcStorage.storageName+"="+srcStorage.rootFolder);
-	System.err.println("[scan src Folder]");
-	srcStorage.scanFolder();
-	System.err.println("[write src DB]");
-	srcStorage.cleanupFolder(false);
-	srcStorage.writeDB();
+	backup(srcStorage,dstStorage);
 
-	if ( dstStorage == null ) return;
-
-	System.err.println("[read dst DB]");
-	dstStorage.readDB();
-	System.err.println(dstStorage.storageName+"="+dstStorage.rootFolder);
-	System.err.println("[scan dst Folder]");
-	dstStorage.scanFolder();
-	System.err.println("[write dst DB]");
-	dstStorage.writeDB();
-
-	System.err.println("[compare]");
-	LinkedList<File> frlist = toFileList(srcStorage);
-	LinkedList<File> tolist = toFileList(dstStorage);
-	LinkedList<File> copylist = compare(frlist,tolist);
-
-	// frlist means "copy"
-	System.err.println("[copy]");
-	log.info("start copy from "+srcStorage.rootFolder+" to "+dstStorage.rootFolder);
-	for ( File file : frlist ) {
-	  //file.dump(System.err);
-	  srcStorage.copyFile(file.filePath,dstStorage);
-	}
-
-	// copylist means "copy override"
-	System.err.println("[copy override]");
-	log.info("start copy override from "+srcStorage.rootFolder+" to "+dstStorage.rootFolder);
-	for ( File file : copylist ) {
-	  //file.dump(System.err);
-	  srcStorage.copyFile(file.filePath,dstStorage);
-	}
-
-	// tolist means "delete"
-	System.err.println("[delete]");
-	log.info("start delete from "+dstStorage.rootFolder);
-	for ( File file : tolist ) {
-	  //file.dump(System.err);
-	  dstStorage.deleteFile(file.filePath);
-	}
-
-	// set lastModifed
-	for ( Folder folder : dstStorage.folders ) {
-	  for ( File file : folder.files ) {
-	    dstStorage.setLastModified(file.filePath,srcStorage);
-	  }
-	}
-
-	System.err.println("[clean folder]");
-	dstStorage.cleanupFolder(true);
-	dstStorage.writeDB();
       } catch ( Exception ex ) {
 	log.error(ex);
       }
     }
+  }
+
+  public static void backup( Storage srcStorage, Storage dstStorage )
+  throws IOException
+  {
+    System.err.println("[read src DB]");
+    srcStorage.readDB();
+    System.err.println(srcStorage.storageName+"="+srcStorage.getRoot());
+    System.err.println("[scan src Folder]");
+    srcStorage.scanFolder();
+    System.err.println("[write src DB]");
+    srcStorage.cleanupFolder(false);
+    srcStorage.writeDB();
+
+    if ( dstStorage == null ) return;
+
+    System.err.println("[read dst DB]");
+    dstStorage.readDB();
+    System.err.println(dstStorage.storageName+"="+dstStorage.getRoot());
+    System.err.println("[scan dst Folder]");
+    dstStorage.scanFolder();
+    System.err.println("[write dst DB]");
+    dstStorage.writeDB();
+
+    System.err.println("[compare]");
+    LinkedList<File> frlist = toFileList(srcStorage);
+    LinkedList<File> tolist = toFileList(dstStorage);
+    LinkedList<File> copylist = compare(frlist,tolist);
+
+    // frlist means "copy"
+    System.err.println("[copy]");
+    log.info("start copy from "+srcStorage.getRoot()+" to "+dstStorage.getRoot());
+    for ( File file : frlist ) {
+      //file.dump(System.err);
+      srcStorage.copyFile(file.filePath,dstStorage);
+    }
+
+    // copylist means "copy override"
+    System.err.println("[copy override]");
+    log.info("start copy override from "+srcStorage.getRoot()+" to "+dstStorage.getRoot());
+    for ( File file : copylist ) {
+      //file.dump(System.err);
+      srcStorage.copyFile(file.filePath,dstStorage);
+    }
+
+    // tolist means "delete"
+    System.err.println("[delete]");
+    log.info("start delete from "+dstStorage.getRoot());
+    for ( File file : tolist ) {
+      //file.dump(System.err);
+      dstStorage.deleteFile(file.filePath);
+    }
+
+    // set lastModifed
+    for ( Folder folder : dstStorage.folders ) {
+      for ( File file : folder.files ) {
+	dstStorage.setLastModified(file.filePath,srcStorage);
+      }
+    }
+
+    System.err.println("[clean folder]");
+    dstStorage.cleanupFolder(true);
+    dstStorage.writeDB();
   }
 
   public static void usage()

@@ -20,31 +20,44 @@ import java.util.ListIterator;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
+
 import static mylib.backuper.Backuper.log;
 import static mylib.backuper.Backuper.STDFORMAT;
 
 public class DataBase extends HashMap<String,DataBase.Storage>
 {
   // ======================================================================
-  public class Storage
+  public abstract class Storage
   {
-    String storageName;
-    Path rootFolder;
-    LinkedList<Folder> folders = null;
-    LinkedList<Pattern> ignoreFilePats = new LinkedList<>();
-    LinkedList<Pattern> ignoreFolderPats = new LinkedList<>();
+    public String storageName;
+    public LinkedList<Folder> folders = null;		// 全てのフォルダのリスト
+    public LinkedList<Pattern> ignoreFilePats = new LinkedList<>();
+    public LinkedList<Pattern> ignoreFolderPats = new LinkedList<>();
 
     public Storage( String storageName )
     {
       this.storageName = storageName;
     }
 
+    public abstract boolean mkParentDir( Path path ) throws IOException;
+
+    public abstract InputStream newInputStream( Path path ) throws IOException;
+
+    public abstract OutputStream newOutputStream( Path path ) throws IOException;
+
+    public abstract void setLastModifiedTime( Path path, long time ) throws IOException;
+
+    public abstract boolean deleteRealFile( Path path ) throws IOException;
+
+    public abstract String getRoot();
+
+    // --------------------------------------------------
     public Folder getFolder( Path path )
     {
-      Folder folder = find(folders,path);
+      Folder folder = findFromList(folders,path);
       if ( folder == null ) {
 	folder = new Folder(path);
-	register(folders,folder);
+	registerToList(folders,folder);
       }
       return folder;
     }
@@ -56,10 +69,10 @@ public class DataBase extends HashMap<String,DataBase.Storage>
       log.info("Read DataBase "+storageName);
 
       LinkedList<String> list = new LinkedList<>();
-      try {
-	try (
-	  Stream<String> stream = Files.lines(dbFolder.resolve(storageName+".db"))
-	) { stream.forEach(list::add); }
+      try (
+	Stream<String> stream = Files.lines(dbFolder.resolve(storageName+".db"))
+      ) {
+	stream.forEach(list::add);
       } catch ( NoSuchFileException ex ) {
 	log.info(ex);
       }
@@ -111,37 +124,46 @@ public class DataBase extends HashMap<String,DataBase.Storage>
       Storage srcStorage = this;
       Path parentPath = filePath.getParent();
       if ( parentPath == null ) parentPath = Paths.get(".");
-      Folder srcFolder = find(srcStorage.folders,parentPath);
-      File   srcFile   = find(srcFolder.files,filePath);
+      Folder srcFolder = findFromList(srcStorage.folders,parentPath);
+      File   srcFile   = findFromList(srcFolder.files,filePath);
       Folder dstFolder = dstStorage.getFolder(parentPath);
-      File   dstFile   = find(dstFolder.files,filePath);
+      File   dstFile   = findFromList(dstFolder.files,filePath);
       String command = "copy override ";
       if ( dstFile == null ) {
 	dstFile = new File(filePath);
-	register(dstFolder.files,dstFile);
+	registerToList(dstFolder.files,dstFile);
 	command = "copy ";
       }
       dstFile.hashValue = srcFile.hashValue;
       dstFile.length = srcFile.length;
       dstFile.lastModified = srcFile.lastModified;
+      /*
       Path dstPath = dstStorage.rootFolder.resolve(dstFile.filePath);
       Path dstParent = dstPath.getParent();
       if ( !Files.isDirectory(dstParent) ) {
 	log.message("mkdir "+dstFile.filePath.getParent());
 	Files.createDirectories(dstParent);
       }
+      */
+      
+      if ( dstStorage.mkParentDir(dstFile.filePath) ) {
+	log.message("mkdir "+dstFile.filePath.getParent());
+      }
       log.message(command+filePath);
       try ( 
-	InputStream  in  = Files.newInputStream(rootFolder.resolve(srcFile.filePath));
-	OutputStream out = Files.newOutputStream(dstPath) )
-      {
+	InputStream  in  = this.newInputStream(srcFile.filePath);
+	OutputStream out = dstStorage.newOutputStream(dstFile.filePath);
+      ) {
 	byte buf[] = new byte[1024*64];
 	int len;
 	while ( (len = in.read(buf)) > 0 ) {
 	  out.write(buf,0,len);
 	}
       }
+      /*
       Files.setLastModifiedTime(dstPath,FileTime.fromMillis(dstFile.lastModified));
+      */
+      dstStorage.setLastModifiedTime(dstFile.filePath,dstFile.lastModified);
     }
 
     public void setLastModified( Path filePath, Storage srcStorage )
@@ -150,30 +172,43 @@ public class DataBase extends HashMap<String,DataBase.Storage>
       Storage dstStorage = this;
       Path parentPath = filePath.getParent();
       if ( parentPath == null ) parentPath = Paths.get(".");
-      Folder srcFolder = find(srcStorage.folders,parentPath);
-      File   srcFile   = find(srcFolder.files,filePath);
-      Folder dstFolder = find(dstStorage.folders,parentPath);
-      File   dstFile   = find(dstFolder.files,filePath);
+      Folder srcFolder = findFromList(srcStorage.folders,parentPath);
+      File   srcFile   = findFromList(srcFolder.files,filePath);
+      Folder dstFolder = findFromList(dstStorage.folders,parentPath);
+      File   dstFile   = findFromList(dstFolder.files,filePath);
 
       if ( dstFile.lastModified == srcFile.lastModified ) return;
 
       log.info("set last modified "+dstFile.filePath);
       dstFile.lastModified = srcFile.lastModified;
+      /*
       Path dstPath = dstStorage.rootFolder.resolve(dstFile.filePath);
       Files.setLastModifiedTime(dstPath,FileTime.fromMillis(dstFile.lastModified));
+      */
+      dstStorage.setLastModifiedTime(dstFile.filePath,dstFile.lastModified);
     }
 
     public void deleteFile( Path delPath )
     throws IOException
     {
       log.message("delete "+delPath);
+      /*
       Files.delete(rootFolder.resolve(delPath));
+      */
+      deleteRealFile(delPath);
       Path parentPath = delPath.getParent();
       if ( parentPath == null ) parentPath = Paths.get(".");
-      Folder folder = find(this.folders,parentPath);
-      delete(folder.files,delPath);
+      Folder folder = findFromList(this.folders,parentPath);
+      deleteFromList(folder.files,delPath);
     }
 
+    /**
+     * folders から空のフォルダを削除する。
+     *
+     * @param doRemove true の場合、物理的にも削除する。
+     *
+     * @throws IOException
+     */
     public void cleanupFolder( boolean doRemove )
     throws IOException
     {
@@ -192,103 +227,21 @@ public class DataBase extends HashMap<String,DataBase.Storage>
 	      .sorted((x,y) -> -x.compareTo(y))
 	      .collect(Collectors.toList())
       ) {
+	/*
 	Path full = rootFolder.resolve(path);
 	if ( Files.list(full).count() == 0 ) {
 	  log.message("rmdir "+path);
 	  Files.delete(full);
 	}
+	*/
+	if ( deleteRealFile(path) ) log.message("rmdir "+path);
       }
     }
 
     // --------------------------------------------------
-    public void scanFolder()
-    throws IOException
-    {
-      log.info("Scan Folder "+storageName+" "+rootFolder);
-
-      LinkedList<Folder> origFolders = folders;
-      folders = new LinkedList<Folder>();
-      LinkedList<Path> folderList = new LinkedList<>();
-      LinkedList<Path> pathList = new LinkedList<>();
-      folderList.add(rootFolder);
-      while ( folderList.size() > 0 ) {
-	Path folderpath = folderList.remove();
-	Path rel = rootFolder.relativize(folderpath);
-	if ( rel.toString().length() == 0 ) rel = Paths.get(".");
-	log.debug("new Folder("+rel+")");
-	Folder folder = new Folder(rel);
-	register(folders,folder);
-	pathList.clear();
-	try ( Stream<Path> stream = Files.list(folderpath) ) {
-	  stream.forEach(pathList::add);
-	}
-	nextPath:
-	for ( Path path : pathList ) {
-	  Path relpath = rootFolder.relativize(path);
-	  if ( Files.isSymbolicLink(path) ) {
-	    log.info("ignore symbolic link : "+path);
-	    continue nextPath;
-	  } else if ( Files.isDirectory(path) ) {
-	    log.debug("scan folder "+relpath);
-	    for ( Pattern pat : ignoreFolderPats ) {
-	      if ( pat.matcher(relpath.toString()).matches() ) {
-		log.info("ignore folder "+relpath);
-		continue nextPath;
-	      }
-	    }
-	    folderList.add(path);
-	  } else {
-	    log.debug("scan file "+relpath);
-	    for ( Pattern pat : ignoreFilePats ) {
-	      if ( pat.matcher(relpath.getFileName().toString()).matches() ) {
-		log.info("ignore file "+relpath);
-		continue nextPath;
-	      }
-	    }
-	    log.debug("new File("+relpath+")");
-	    File file = new File(relpath);
-	    register(folder.files,file);
-	    file.length = Files.size(path);
-	    file.lastModified = Files.getLastModifiedTime(path).toMillis();
-	    Folder origfolder = null;
-	    File origfile = null;
-	    if ( 
-	      origFolders != null &&
-	      (origfolder = find(origFolders,folder.folderPath)) != null &&
-	      (origfile = find(origfolder.files,relpath)) != null &&
-	      file.length == origfile.length &&
-	      file.lastModified == origfile.lastModified
-	    ) {
-	      file.hashValue = origfile.hashValue;
-	    } else {
-	      file.hashValue = getMD5(path);
-	    }
-	  }
-	}
-      }
-      /*
-      folders = folders.stream()
-	.filter(folder -> folder.files.size() != 0)
-	.collect(Collectors.toCollection(LinkedList::new));
-      */
-    }
+    public abstract void scanFolder() throws IOException;
 
     // --------------------------------------------------
-    public String toString()
-    {
-      StringBuffer buf = new StringBuffer(rootFolder.toString());
-      if ( folders != null ) {
-	buf.append(" (");
-	int cnt = 0;
-	for ( Folder folder : folders ) {
-	  cnt += folder.files.size();
-	}
-	buf.append(cnt);
-	buf.append(" files)");
-      }
-      return buf.toString();
-    }
-
     public void dump( PrintStream out )
     {
       for ( Folder folder : folders ) {
@@ -297,6 +250,27 @@ public class DataBase extends HashMap<String,DataBase.Storage>
 	  file.dump(out);
 	}
       }
+    }
+
+    // --------------------------------------------------
+    public String getMD5( Path path )
+    throws IOException
+    {
+      log.info("Calculate MD5 "+path);
+
+      digest.reset();
+      try ( InputStream in = Files.newInputStream(path) )
+      {
+	byte buf[] = new byte[1024*64];
+	int len;
+	while ( (len = in.read(buf)) > 0 ) {
+	  digest.update(buf,0,len);
+	}
+      }
+      String str = Base64.getEncoder().encodeToString(digest.digest());
+      int idx = str.indexOf('=');
+      if ( idx > 0 ) str = str.substring(0,idx);
+      return str;
     }
   }
 
@@ -344,7 +318,7 @@ public class DataBase extends HashMap<String,DataBase.Storage>
     public Path getPath();
   }
 
-  public static <T extends PathHolder> void register( LinkedList<T> list, T item )
+  public static <T extends PathHolder> void registerToList( LinkedList<T> list, T item )
   {
     ListIterator<T> itr = list.listIterator();
     while ( itr.hasNext() ) {
@@ -360,7 +334,7 @@ public class DataBase extends HashMap<String,DataBase.Storage>
     if ( item != null ) list.add(item);
   }
 
-  public static <T extends PathHolder> T find( LinkedList<T> list, Path path )
+  public static <T extends PathHolder> T findFromList( LinkedList<T> list, Path path )
   {
     for ( T item : list ) {
       if ( item.getPath().equals(path) ) return item;
@@ -368,7 +342,7 @@ public class DataBase extends HashMap<String,DataBase.Storage>
     return null;
   }
 
-  public static <T extends PathHolder> T delete( LinkedList<T> list, Path path )
+  public static <T extends PathHolder> T deleteFromList( LinkedList<T> list, Path path )
   {
     ListIterator<T> itr = list.listIterator();
     while ( itr.hasNext() ) {
@@ -440,35 +414,13 @@ public class DataBase extends HashMap<String,DataBase.Storage>
 	  log.error("Not Absolute Path : "+line);
 	  return;
 	}
-	storage = new Storage(key);
+	storage = new LocalStorage(this,key,path);
 	this.put(storage.storageName,storage);
-	storage.rootFolder = path;
 	storage.storageName = key;
 	log.info("Read Config "+key+"="+path);
       }
     } catch ( IOException ex ) {
       log.error(ex);
     }
-  }
-
-  // --------------------------------------------------
-  public String getMD5( Path path )
-  throws IOException
-  {
-    log.info("Calculate MD5 "+path);
-
-    digest.reset();
-    try ( InputStream in = Files.newInputStream(path) )
-    {
-      byte buf[] = new byte[1024*64];
-      int len;
-      while ( (len = in.read(buf)) > 0 ) {
-	digest.update(buf,0,len);
-      }
-    }
-    String str = Base64.getEncoder().encodeToString(digest.digest());
-    int idx = str.indexOf('=');
-    if ( idx > 0 ) str = str.substring(0,idx);
-    return str;
   }
 }
