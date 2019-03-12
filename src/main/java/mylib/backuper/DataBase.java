@@ -1,5 +1,8 @@
 package mylib.backuper;
 
+import static mylib.backuper.Backuper.STDFORMAT;
+import static mylib.backuper.Backuper.log;
+
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
@@ -8,7 +11,6 @@ import java.nio.file.Files;
 import java.nio.file.NoSuchFileException;
 import java.nio.file.Path;
 import java.nio.file.Paths;
-import java.nio.file.attribute.FileTime;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.text.ParseException;
@@ -16,13 +18,11 @@ import java.util.Base64;
 import java.util.Date;
 import java.util.HashMap;
 import java.util.LinkedList;
+import java.util.List;
 import java.util.ListIterator;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
-
-import static mylib.backuper.Backuper.log;
-import static mylib.backuper.Backuper.STDFORMAT;
 
 public class DataBase extends HashMap<String,DataBase.Storage>
 {
@@ -39,17 +39,27 @@ public class DataBase extends HashMap<String,DataBase.Storage>
       this.storageName = storageName;
     }
 
+    public abstract String getRoot();
+
     public abstract boolean mkParentDir( Path path ) throws IOException;
 
     public abstract InputStream newInputStream( Path path ) throws IOException;
 
     public abstract OutputStream newOutputStream( Path path ) throws IOException;
 
-    public abstract void setLastModifiedTime( Path path, long time ) throws IOException;
+    public abstract void setLastModified( Path path, long time ) throws IOException;
+
+    public abstract long getLastModified( Path path ) throws IOException;
+
+    public abstract long getSize( Path relpath ) throws IOException;
+
+    public abstract List<Path> pathList( Path rel ) throws IOException;
 
     public abstract boolean deleteRealFile( Path path ) throws IOException;
 
-    public abstract String getRoot();
+    public abstract boolean isSymbolicLink( Path relpath );
+
+    public abstract boolean isDirectory( Path relpath );
 
     // --------------------------------------------------
     public Folder getFolder( Path path )
@@ -137,19 +147,11 @@ public class DataBase extends HashMap<String,DataBase.Storage>
       dstFile.hashValue = srcFile.hashValue;
       dstFile.length = srcFile.length;
       dstFile.lastModified = srcFile.lastModified;
-      /*
-      Path dstPath = dstStorage.rootFolder.resolve(dstFile.filePath);
-      Path dstParent = dstPath.getParent();
-      if ( !Files.isDirectory(dstParent) ) {
-	log.message("mkdir "+dstFile.filePath.getParent());
-	Files.createDirectories(dstParent);
-      }
-      */
       
+      log.message(command+filePath);
       if ( dstStorage.mkParentDir(dstFile.filePath) ) {
 	log.message("mkdir "+dstFile.filePath.getParent());
       }
-      log.message(command+filePath);
       try ( 
 	InputStream  in  = this.newInputStream(srcFile.filePath);
 	OutputStream out = dstStorage.newOutputStream(dstFile.filePath);
@@ -160,10 +162,7 @@ public class DataBase extends HashMap<String,DataBase.Storage>
 	  out.write(buf,0,len);
 	}
       }
-      /*
-      Files.setLastModifiedTime(dstPath,FileTime.fromMillis(dstFile.lastModified));
-      */
-      dstStorage.setLastModifiedTime(dstFile.filePath,dstFile.lastModified);
+      dstStorage.setLastModified(dstFile.filePath,dstFile.lastModified);
     }
 
     public void setLastModified( Path filePath, Storage srcStorage )
@@ -181,20 +180,13 @@ public class DataBase extends HashMap<String,DataBase.Storage>
 
       log.info("set last modified "+dstFile.filePath);
       dstFile.lastModified = srcFile.lastModified;
-      /*
-      Path dstPath = dstStorage.rootFolder.resolve(dstFile.filePath);
-      Files.setLastModifiedTime(dstPath,FileTime.fromMillis(dstFile.lastModified));
-      */
-      dstStorage.setLastModifiedTime(dstFile.filePath,dstFile.lastModified);
+      dstStorage.setLastModified(dstFile.filePath,dstFile.lastModified);
     }
 
     public void deleteFile( Path delPath )
     throws IOException
     {
       log.message("delete "+delPath);
-      /*
-      Files.delete(rootFolder.resolve(delPath));
-      */
       deleteRealFile(delPath);
       Path parentPath = delPath.getParent();
       if ( parentPath == null ) parentPath = Paths.get(".");
@@ -227,20 +219,72 @@ public class DataBase extends HashMap<String,DataBase.Storage>
 	      .sorted((x,y) -> -x.compareTo(y))
 	      .collect(Collectors.toList())
       ) {
-	/*
-	Path full = rootFolder.resolve(path);
-	if ( Files.list(full).count() == 0 ) {
-	  log.message("rmdir "+path);
-	  Files.delete(full);
-	}
-	*/
 	if ( deleteRealFile(path) ) log.message("rmdir "+path);
       }
     }
 
     // --------------------------------------------------
-    public abstract void scanFolder() throws IOException;
+    public void scanFolder()
+    throws IOException
+    {
+      log.info("Scan Folder "+storageName/*+" "+rootFolder*/);
 
+      LinkedList<Folder> origFolders = folders;
+      folders = new LinkedList<Folder>();
+      LinkedList<Path> folderList = new LinkedList<>();
+      folderList.add(Paths.get("."));
+      while ( folderList.size() > 0 ) {
+	Path rel = folderList.remove();
+
+	log.debug("new Folder("+rel+")");
+	Folder folder = new Folder(rel);
+	System.out.println("folder = "+folder.folderPath);
+	registerToList(folders,folder);
+	nextPath:
+	for ( Path relpath : pathList(rel) ) {
+	  if ( isSymbolicLink(relpath) ) {
+	    log.info("ignore symbolic link : "+relpath);
+	    continue nextPath;
+	  } else if ( isDirectory(relpath) ) {
+	    log.debug("scan folder "+relpath);
+	    for ( Pattern pat : ignoreFolderPats ) {
+	      if ( pat.matcher(relpath.toString()).matches() ) {
+		//log.info("ignore folder "+relpath);
+		continue nextPath;
+	      }
+	    }
+	    folderList.add(relpath);
+	  } else {
+	    log.debug("scan file "+relpath);
+	    for ( Pattern pat : ignoreFilePats ) {
+	      if ( pat.matcher(relpath.getFileName().toString()).matches() ) {
+		//log.info("ignore file "+relpath);
+		continue nextPath;
+	      }
+	    }
+	    log.debug("new File("+relpath+")");
+	    File file = new File(relpath);
+	    registerToList(folder.files,file);
+	    file.length = getSize(relpath);
+	    file.lastModified = getLastModified(relpath);
+	    Folder origfolder = null;
+	    File origfile = null;
+	    if ( 
+	      origFolders != null &&
+	      (origfolder = findFromList(origFolders,folder.folderPath)) != null &&
+	      (origfile = findFromList(origfolder.files,relpath)) != null &&
+	      file.length == origfile.length &&
+	      file.lastModified == origfile.lastModified
+	    ) {
+	      file.hashValue = origfile.hashValue;
+	    } else {
+	      file.hashValue = getMD5(relpath);
+	    }
+	  }
+	}
+      }
+    }
+    
     // --------------------------------------------------
     public void dump( PrintStream out )
     {
@@ -259,7 +303,7 @@ public class DataBase extends HashMap<String,DataBase.Storage>
       log.info("Calculate MD5 "+path);
 
       digest.reset();
-      try ( InputStream in = Files.newInputStream(path) )
+      try ( InputStream in = newInputStream(path) )
       {
 	byte buf[] = new byte[1024*64];
 	int len;

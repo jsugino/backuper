@@ -9,6 +9,7 @@ import java.io.IOException;
 import java.io.PrintStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.Date;
 import java.util.HashMap;
 import java.util.LinkedList;
 import java.util.stream.Stream;
@@ -39,10 +40,11 @@ public class BackuperTest
     }
     createFiles(srcdir,new Object[]{
 	"a", "aa",
-	"b", "",
+	"b", "bbb",
+	"@l", "b",
 	"c", new Object[]{
-	  "c1", "",
-	  "c2", "",
+	  "c1", "ccc111",
+	  "c2", "ccc222",
 	},
       });
     createFiles(dstdir,new Object[]{
@@ -50,6 +52,9 @@ public class BackuperTest
 	"y", new Object[]{
 	  "y1", "",
 	  "y2", "",
+	},
+	"c", new Object[]{
+	  "c2", "ccc",
 	},
       });
 
@@ -68,22 +73,32 @@ public class BackuperTest
 	.forEach(answer::add);
     }
     compareFiles(dstdir,new Object[]{
-	"b", "",
+	"b", "bbb", new Date(new File(srcdir,"b").lastModified()),
 	"c", new Object[]{
-	  "c2", "",
+	  "c2", "ccc222", new Date(new File(srcdir,"c/c2").lastModified()),
 	},
 	"x", "xx",
 	"y", new Object[]{
 	  "y1", "",
 	},
       });
+    cat(new File(dbdir,"test.src.db"));
+    cat(new File(dbdir,"test.dst.db"));
   }
 
   public void createFiles( File dir, Object data[] )
   throws IOException
   {
     for ( int i = 0; i < data.length; i += 2 ) {
-      File target = new File(dir,(String)data[i]);
+      String name = (String)data[i];
+      if ( name.charAt(0) == '@' ) {
+	name = name.substring(1,name.length());
+	Files.createSymbolicLink(
+	  new File(dir,name).getAbsoluteFile().toPath(),
+	  new File(dir,(String)data[i+1]).getAbsoluteFile().toPath());
+	continue;
+      }
+      File target = new File(dir,name);
       if ( data[i+1] instanceof String ) {
 	try ( FileOutputStream out = new FileOutputStream(target) ) {
 	  out.write(data[i+1].toString().getBytes());
@@ -99,19 +114,25 @@ public class BackuperTest
   throws IOException
   {
     HashMap<String,Object> map = new HashMap<>();
+    HashMap<String,Date> dmap = new HashMap<>();
     for ( int i = 0; i < data.length; i += 2 ) {
       map.put((String)data[i],data[i+1]);
+      if ( i+2 < data.length && data[i+2] instanceof Date ) {
+	dmap.put((String)data[i],(Date)data[i+2]);
+	++i;
+      }
     }
     for ( File file : dir.listFiles() ) {
       Object exp = map.remove(file.getName());
       if ( exp == null ) fail("more file/folder in actual : "+file);
       if ( exp instanceof String ) {
 	if ( !file.isFile() ) fail("not a file in actual "+file);
-	try ( FileInputStream in = new FileInputStream(file) ) {
-	  byte buf[] = new byte[1024];
-	  int len = in.read(buf);
-	  if ( len < 0 ) len = 0;
-	  assertEquals(file.toString(),(String)exp,new String(buf,0,len));
+	assertEquals(file.toString(),
+	  (String)exp,
+	  new String(Files.readAllBytes(file.toPath())));
+	Date dt = dmap.get(file.getName());
+	if ( dt != null ) {
+	  assertEquals("timestamp for "+file,dt.getTime(),file.lastModified());
 	}
       } else {
 	if ( !file.isDirectory() ) fail("not a directory in actual "+file);
@@ -119,5 +140,12 @@ public class BackuperTest
       }
     }
     if ( map.size() > 0 ) fail("more file/folder in expects "+map);
+  }
+
+  public void cat( File file )
+  throws IOException
+  {
+    System.out.println("----------[ "+file+" ]----------");
+    Files.readAllLines(file.toPath()).stream().forEach(System.out::println);
   }
 }
