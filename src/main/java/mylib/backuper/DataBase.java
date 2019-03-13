@@ -49,17 +49,9 @@ public class DataBase extends HashMap<String,DataBase.Storage>
 
     public abstract void setLastModified( Path path, long time ) throws IOException;
 
-    public abstract long getLastModified( Path path ) throws IOException;
-
-    public abstract long getSize( Path relpath ) throws IOException;
-
-    public abstract List<Path> pathList( Path rel ) throws IOException;
+    public abstract List<PathHolder> getPathHolderList( Path path ) throws IOException;
 
     public abstract boolean deleteRealFile( Path path ) throws IOException;
-
-    public abstract boolean isSymbolicLink( Path relpath );
-
-    public abstract boolean isDirectory( Path relpath );
 
     // --------------------------------------------------
     public Folder getFolder( Path path )
@@ -147,7 +139,7 @@ public class DataBase extends HashMap<String,DataBase.Storage>
       dstFile.hashValue = srcFile.hashValue;
       dstFile.length = srcFile.length;
       dstFile.lastModified = srcFile.lastModified;
-      
+
       log.message(command+filePath);
       if ( dstStorage.mkParentDir(dstFile.filePath) ) {
 	log.message("mkdir "+dstFile.filePath.getParent());
@@ -231,42 +223,39 @@ public class DataBase extends HashMap<String,DataBase.Storage>
 
       LinkedList<Folder> origFolders = folders;
       folders = new LinkedList<Folder>();
-      LinkedList<Path> folderList = new LinkedList<>();
-      folderList.add(Paths.get("."));
+      LinkedList<Folder> folderList = new LinkedList<>();
+      folderList.add(new Folder(Paths.get(".")));
       while ( folderList.size() > 0 ) {
-	Path rel = folderList.remove();
-
-	log.debug("new Folder("+rel+")");
-	Folder folder = new Folder(rel);
-	System.out.println("folder = "+folder.folderPath);
+	Folder folder = folderList.remove();
+	log.debug("new Folder("+folder.folderPath+")");
 	registerToList(folders,folder);
 	nextPath:
-	for ( Path relpath : pathList(rel) ) {
-	  if ( isSymbolicLink(relpath) ) {
-	    log.info("ignore symbolic link : "+relpath);
-	    continue nextPath;
-	  } else if ( isDirectory(relpath) ) {
+	for ( PathHolder holder : getPathHolderList(folder.folderPath) ) {
+	  Path relpath = holder.getPath();
+	  if ( holder instanceof Folder ) {
 	    log.debug("scan folder "+relpath);
 	    for ( Pattern pat : ignoreFolderPats ) {
 	      if ( pat.matcher(relpath.toString()).matches() ) {
-		//log.info("ignore folder "+relpath);
+		log.info("ignore folder "+relpath);
 		continue nextPath;
 	      }
 	    }
-	    folderList.add(relpath);
-	  } else {
+	    folderList.add((Folder)holder);
+	  } else if ( holder instanceof File ) {
+	    File file = (File)holder;
+	    if ( file.type == File.FileType.SYMLINK ) {
+	      log.info("ignore symbolic link : "+holder.getPath());
+	      continue nextPath;
+	    }
 	    log.debug("scan file "+relpath);
 	    for ( Pattern pat : ignoreFilePats ) {
 	      if ( pat.matcher(relpath.getFileName().toString()).matches() ) {
-		//log.info("ignore file "+relpath);
+		log.info("ignore file "+relpath);
 		continue nextPath;
 	      }
 	    }
 	    log.debug("new File("+relpath+")");
-	    File file = new File(relpath);
 	    registerToList(folder.files,file);
-	    file.length = getSize(relpath);
-	    file.lastModified = getLastModified(relpath);
 	    Folder origfolder = null;
 	    File origfile = null;
 	    if ( 
@@ -284,7 +273,7 @@ public class DataBase extends HashMap<String,DataBase.Storage>
 	}
       }
     }
-    
+
     // --------------------------------------------------
     public void dump( PrintStream out )
     {
@@ -337,9 +326,15 @@ public class DataBase extends HashMap<String,DataBase.Storage>
   public static class File implements PathHolder
   {
     public Path filePath;
+    public FileType type;
     public String hashValue;
     public long lastModified;
     public long length;
+
+    public enum FileType {
+      NORMAL,
+      SYMLINK;
+    }
 
     public File( Path filePath )
     {
@@ -371,11 +366,10 @@ public class DataBase extends HashMap<String,DataBase.Storage>
       if ( cmp < 0 ) {
 	itr.previous();
 	itr.add(item);
-	item = null;
-	break;
+	return;
       }
     }
-    if ( item != null ) list.add(item);
+    list.add(item);
   }
 
   public static <T extends PathHolder> T findFromList( LinkedList<T> list, Path path )
@@ -386,17 +380,16 @@ public class DataBase extends HashMap<String,DataBase.Storage>
     return null;
   }
 
-  public static <T extends PathHolder> T deleteFromList( LinkedList<T> list, Path path )
+  public static <T extends PathHolder> boolean deleteFromList( LinkedList<T> list, Path path )
   {
     ListIterator<T> itr = list.listIterator();
     while ( itr.hasNext() ) {
-      T orig;
-      if ( (orig = itr.next()).getPath().equals(path) ) {
+      if ( itr.next().getPath().equals(path) ) {
 	itr.remove();
-	return orig;
+	return true;
       }
     }
-    return null;
+    return false;
   }
 
   // ======================================================================
@@ -453,15 +446,27 @@ public class DataBase extends HashMap<String,DataBase.Storage>
 	  continue;
 	}
 	String key = line.substring(0,idx).trim();
-	Path path = Paths.get(line.substring(idx+1).trim());
-	if ( !path.isAbsolute() ) {
-	  log.error("Not Absolute Path : "+line);
-	  return;
+	String defstr = line.substring(idx+1).trim();
+	if ( defstr.startsWith("ftp://") ) {
+	  int idx0 = "ftp://".length();
+	  int idx1 = defstr.indexOf(':',idx0);
+	  int idx3 = defstr.indexOf('/',idx1);
+	  int idx2 = defstr.lastIndexOf('@',idx3);
+	  String userid   = defstr.substring(idx0,idx1);
+	  String password = defstr.substring(idx1+1,idx2);
+	  String hostname = defstr.substring(idx2+1,idx3);
+	  Path rootFolder = Paths.get(defstr.substring(idx3));
+	  storage = new FtpStorage(this,key,userid,password,hostname,rootFolder);
+	} else {
+	  Path path = Paths.get(defstr);
+	  if ( !path.isAbsolute() ) {
+	    log.error("Not Absolute Path : "+line);
+	    return;
+	  }
+	  storage = new LocalStorage(this,key,path);
 	}
-	storage = new LocalStorage(this,key,path);
 	this.put(storage.storageName,storage);
-	storage.storageName = key;
-	log.info("Read Config "+key+"="+path);
+	log.info("Read Config "+key+"="+defstr);
       }
     } catch ( IOException ex ) {
       log.error(ex);

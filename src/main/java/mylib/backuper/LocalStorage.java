@@ -1,8 +1,5 @@
 package mylib.backuper;
 
-import static mylib.backuper.DataBase.findFromList;
-import static mylib.backuper.DataBase.registerToList;
-
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
@@ -10,22 +7,24 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.nio.file.attribute.FileTime;
+import java.util.LinkedList;
 import java.util.List;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 import mylib.backuper.DataBase.File;
 import mylib.backuper.DataBase.Folder;
+import mylib.backuper.DataBase.PathHolder;
 import mylib.backuper.DataBase.Storage;
 
 public class LocalStorage extends Storage
 {
   public Path rootFolder;				// 絶対パスでのルートフォルダー
 
-  public LocalStorage( DataBase db, String storageName, Path path )
+  public LocalStorage( DataBase db, String storageName, Path rootFolder )
   {
     db.super(storageName);
-    this.rootFolder = path;
+    this.rootFolder = rootFolder;
   }
 
   public String getRoot()
@@ -82,6 +81,32 @@ public class LocalStorage extends Storage
     ) {
       return stream.map(rootFolder::relativize).collect(Collectors.toList());
     }
+  }
+
+  public List<PathHolder> getPathHolderList( Path rel )
+  throws IOException
+  {
+    LinkedList<PathHolder> list = new LinkedList<>();
+    try ( Stream<Path> stream =
+      Files.list(rel.equals(Paths.get(".")) ? rootFolder : rootFolder.resolve(rel))
+    ) {
+      for ( Path path : stream.collect(Collectors.toList()) ) {
+	if ( Files.isSymbolicLink(path) ) {
+	  File file = new File(rootFolder.relativize(path));
+	  file.type = File.FileType.SYMLINK;
+	  list.add(file);
+	} else if ( Files.isDirectory(path) ) {
+	  list.add(new Folder(rootFolder.relativize(path)));
+	} else {
+	  File file = new File(rootFolder.relativize(path));
+	  file.type = File.FileType.NORMAL;
+	  file.lastModified = Files.getLastModifiedTime(path).toMillis();
+	  file.length = Files.size(path);
+	  list.add(file);
+	}
+      }
+    }
+    return list;
   }
 
   public boolean deleteRealFile( Path path )

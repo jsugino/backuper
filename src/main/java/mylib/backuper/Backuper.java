@@ -15,8 +15,8 @@ import java.util.Date;
 import java.util.LinkedList;
 import java.util.ListIterator;
 import mylib.backuper.DataBase.Storage;
-import static mylib.backuper.DataBase.File;
-import static mylib.backuper.DataBase.Folder;
+import mylib.backuper.DataBase.File;
+import mylib.backuper.DataBase.Folder;
 
 public class Backuper
 {

@@ -8,7 +8,9 @@ import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.PrintStream;
 import java.nio.file.Files;
+import java.nio.file.NoSuchFileException;
 import java.nio.file.Path;
+import java.text.SimpleDateFormat;
 import java.util.Date;
 import java.util.HashMap;
 import java.util.LinkedList;
@@ -42,9 +44,16 @@ public class BackuperTest
 	"a", "aa",
 	"b", "bbb",
 	"@l", "b",
+	"@lc", "c",
 	"c", new Object[]{
 	  "c1", "ccc111",
 	  "c2", "ccc222",
+	  "d", new Object[]{
+	    "d", "ddd",
+	    "@lc", "../../c",
+	    "@lc1", "../c1",
+	    "@lx", "../x",
+	  },
 	},
       });
     createFiles(dstdir,new Object[]{
@@ -57,6 +66,8 @@ public class BackuperTest
 	  "c2", "ccc",
 	},
       });
+    System.out.println("--- ORIG ---");
+    printFolders(tempdir.getRoot());
 
     try ( Backuper.Logger log = new Backuper.Logger(dbdir.toPath().resolve("backup.log")) ) {
       Backuper.log = log;
@@ -72,10 +83,15 @@ public class BackuperTest
 	.map(p->p.length()==0 ? "." : p)
 	.forEach(answer::add);
     }
+    System.out.println("--- ANSWER ---");
+    printFolders(tempdir.getRoot());
     compareFiles(dstdir,new Object[]{
-	"b", "bbb", new Date(new File(srcdir,"b").lastModified()),
+	"b", "bbb", lastModified(srcdir,"b"),
 	"c", new Object[]{
-	  "c2", "ccc222", new Date(new File(srcdir,"c/c2").lastModified()),
+	  "c2", "ccc222", lastModified(srcdir,"c/c2"),
+	  "d", new Object[] {
+	    "d", "ddd", lastModified(srcdir,"c/d/d"),
+	  },
 	},
 	"x", "xx",
 	"y", new Object[]{
@@ -84,6 +100,23 @@ public class BackuperTest
       });
     cat(new File(dbdir,"test.src.db"));
     cat(new File(dbdir,"test.dst.db"));
+  }
+
+  public Date lastModified( File file, String name )
+  throws IOException
+  {
+    return lastModified(new File(file,name));
+  }
+
+  public Date lastModified( File file )
+  throws IOException
+  {
+    try {
+      return new Date(Files.getLastModifiedTime(file.toPath()).toMillis());
+    } catch ( NoSuchFileException ex ) {
+      System.err.println("NoSuchFileException "+ex.getMessage());
+      return new Date(file.lastModified());
+    }
   }
 
   public void createFiles( File dir, Object data[] )
@@ -110,6 +143,8 @@ public class BackuperTest
     }
   }
 
+  SimpleDateFormat FORM = new SimpleDateFormat("yyyy/MM/dd HH:mm:ss.SSS");
+
   public void compareFiles( File dir, Object data[] )
   throws IOException
   {
@@ -132,7 +167,11 @@ public class BackuperTest
 	  new String(Files.readAllBytes(file.toPath())));
 	Date dt = dmap.get(file.getName());
 	if ( dt != null ) {
-	  assertEquals("timestamp for "+file,dt.getTime(),file.lastModified());
+	  System.out
+	    .format("date check %s ",FORM.format(dt))
+	    .format(" <=>  %s",FORM.format(lastModified(file)))
+	    .println();
+	  assertEquals("timestamp for "+file+" "+FORM.format(dt)+" <=> "+FORM.format(lastModified(file)),dt,lastModified(file));
 	}
       } else {
 	if ( !file.isDirectory() ) fail("not a directory in actual "+file);
@@ -140,6 +179,25 @@ public class BackuperTest
       }
     }
     if ( map.size() > 0 ) fail("more file/folder in expects "+map);
+  }
+
+  public void printFolders( File dir )
+  throws IOException
+  {
+    for ( File file : dir.listFiles() ) {
+      String pat =
+	Files.isSymbolicLink(file.toPath()) ? "<link>" :
+	file.isDirectory() ? "<dir>" : "";
+      System.out
+	.format("%s",FORM.format(lastModified(file)))
+	.format(" %-6s",pat)
+	.format(" %s",file.toString())
+	.append(pat.equals("<link>")?" -> "+Files.readSymbolicLink(file.toPath()):"")
+	.println();
+      if ( pat.equals("<dir>") ) {
+	printFolders(file);
+      }
+    }
   }
 
   public void cat( File file )
