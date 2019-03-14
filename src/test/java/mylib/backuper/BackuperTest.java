@@ -1,16 +1,20 @@
 package mylib.backuper;
 
-import static org.junit.Assert.*;
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.fail;
 
 import java.io.File;
-import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.PrintStream;
 import java.nio.file.Files;
 import java.nio.file.NoSuchFileException;
 import java.nio.file.Path;
+import java.nio.file.attribute.FileTime;
 import java.text.SimpleDateFormat;
+import java.util.Arrays;
+import java.util.Collections;
 import java.util.Date;
 import java.util.HashMap;
 import java.util.LinkedList;
@@ -29,75 +33,139 @@ public class BackuperTest
   public void testSimple()
   throws IOException
   {
-    File dbdir = tempdir.newFolder("dic");
-    File srcdir = tempdir.newFolder("src");
-    File dstdir = tempdir.newFolder("dst");
-    try ( PrintStream out = new PrintStream(new File(dbdir,DataBase.CONFIGNAME)) ) {
-      out.println("test.src="+srcdir.getAbsolutePath());
-      out.println("a");
-      out.println("c1");
-      out.println("test.dst="+dstdir.getAbsolutePath());
-      out.println("x");
-      out.println("y1");
-    }
-    createFiles(srcdir,new Object[]{
-	"a", "aa",
-	"b", "bbb",
-	"@l", "b",
-	"@lc", "c",
-	"c", new Object[]{
-	  "c1", "ccc111",
-	  "c2", "ccc222",
-	  "d", new Object[]{
-	    "d", "ddd",
-	    "@lc", "../../c",
-	    "@lc1", "../c1",
-	    "@lx", "../x",
+    File root = tempdir.getRoot();
+    File dbdir = new File(root,"dic");
+    File srcdir = new File(root,"src");
+    File dstdir = new File(root,"dst");
+    createFiles(root,new Object[]{
+	"dic", new Object[]{
+	  DataBase.CONFIGNAME, new String[]{
+	    "test.src="+srcdir.getAbsolutePath(),
+	    "a",
+	    "c1",
+	    "test.dst="+dstdir.getAbsolutePath(),
+	    "x",
+	    "y1",
+	  },
+	},
+	"src", new Object[]{
+	  "a", "aa",
+	  "b", "bbb",
+	  "@l", "b",
+	  "@lc", "c",
+	  "c", new Object[]{
+	    "c1", "ccc111",
+	    "c2", "ccc222",
+	    "d", new Object[]{
+	      "d", "ddd",
+	      "@lc", "../../c",
+	      "@lc1", "../c1",
+	      "@lx", "../x",
+	    },
+	  },
+	},
+	"dst", new Object[]{
+	  "x", "xx",
+	  "y", new Object[]{
+	    "y1", "",
+	    "y2", "",
+	  },
+	  "c", new Object[]{
+	    "c2", "ccc",
 	  },
 	},
       });
-    createFiles(dstdir,new Object[]{
+
+    execute(root,dbdir);
+
+    compareFiles(dstdir,new Object[]{
+	"b", "bbb", lastModified(root,"src/b"),
+	"c", new Object[]{
+	  "c2", "ccc222", lastModified(root,"src/c/c2"),
+	  "d", new Object[] {
+	    "d", "ddd", lastModified(root,"src/c/d/d"),
+	  },
+	},
 	"x", "xx",
 	"y", new Object[]{
 	  "y1", "",
-	  "y2", "",
-	},
-	"c", new Object[]{
-	  "c2", "ccc",
 	},
       });
-    System.out.println("--- ORIG ---");
-    printFolders(tempdir.getRoot());
+  }
 
-    try ( Backuper.Logger log = new Backuper.Logger(dbdir.toPath().resolve("backup.log")) ) {
-      Backuper.log = log;
-      DataBase db = new DataBase(dbdir.toPath());
-      DataBase.Storage srcStorage = db.get("test.src");
-      DataBase.Storage dstStorage = db.get("test.dst");
-      Backuper.backup(srcStorage,dstStorage);
-    }
-    LinkedList<String> answer = new LinkedList<>();
-    try ( Stream<Path> stream = Files.walk(dstdir.toPath()) ) {
-      stream
-	.map(p->dstdir.toPath().relativize(p).toString())
-	.map(p->p.length()==0 ? "." : p)
-	.forEach(answer::add);
-    }
+  //@Test
+  public void testSame()
+  throws Exception
+  {
+    File root = tempdir.getRoot();
+    File dbdir = new File(root,"dic");
+    File srcdir = new File(root,"src");
+    File dstdir = new File(root,"dst");
+    Date current = new Date(System.currentTimeMillis() - 10000L);
+    createFiles(root,new Object[]{
+	"dic", new Object[]{
+	  DataBase.CONFIGNAME, new String[]{
+	    "test.src="+srcdir.getAbsolutePath(),
+	    "test.dst="+dstdir.getAbsolutePath(),
+	  },
+	},
+	"src", new Object[]{
+	  "1", "1", current,
+	  "2", "2", current,
+	  "4", new Object[]{
+	    "1", "4/1", current,
+	  },
+	  "5", "5", current,
+	  "6", new Object[]{
+	    "1", "6/1", current,
+	    "2", "6/2", current
+	  },
+	},
+	"dst", new Object[]{
+	  "2", "2", current,
+	  "3", "3", current,
+	  "4", "4", current,
+	  "5", new Object[]{
+	    "1", "5/1", current,
+	  },
+	  "6", new Object[]{
+	    "2", "6/2", current,
+	    "3", "6/3", current,
+	  },
+	},
+      });
+
+    execute(root,dbdir);
+
+    compareFiles(dstdir,new Object[]{
+	"1", "1", current,
+	"2", "2", current,
+	"4", new Object[]{
+	  "1", "4/1", current,
+	},
+	"5", "5", current,
+	"6", new Object[]{
+	  "1", "6/1", current,
+	  "2", "6/2", current
+	},
+      });
+  }
+
+  public void execute( File root, File dbdir )
+  throws IOException
+  {
+    System.out.println("--- ORIG ---");
+    printFolders(root);
+
+    DataBase db = new DataBase(dbdir.toPath());
+    DataBase.Storage srcStorage = db.get("test.src");
+    DataBase.Storage dstStorage = db.get("test.dst");
+    Backuper.backup(srcStorage,dstStorage);
+
     System.out.println("--- ANSWER ---");
     printFolders(tempdir.getRoot());
-    compareFiles(dstdir,new Object[]{
-	"b", "bbb", lastModified(srcdir,"b"),
-	"c", new Object[]{
-	  "c2", "ccc222", lastModified(srcdir,"c/c2"),
-	  "d", new Object[] {
-	    "d", "ddd", lastModified(srcdir,"c/d/d"),
-	  },
-	},
-	"x", "xx",
-	"y", new Object[]{
-	  "y1", "",
-	},
-      });
+
+    System.out.println("--- Database ---");
     cat(new File(dbdir,"test.src.db"));
     cat(new File(dbdir,"test.dst.db"));
   }
@@ -119,6 +187,12 @@ public class BackuperTest
     }
   }
 
+  public void lastModified( File file, Date date )
+  throws IOException
+  {
+    Files.setLastModifiedTime(file.toPath(),FileTime.fromMillis(date.getTime()));
+  }
+
   public void createFiles( File dir, Object data[] )
   throws IOException
   {
@@ -133,12 +207,25 @@ public class BackuperTest
       }
       File target = new File(dir,name);
       if ( data[i+1] instanceof String ) {
-	try ( FileOutputStream out = new FileOutputStream(target) ) {
-	  out.write(data[i+1].toString().getBytes());
+	Files.write(target.toPath(),data[i+1].toString().getBytes());
+	if ( i+2 < data.length && data[i+2] instanceof Date ) {
+	  lastModified(target,(Date)data[i+2]);
+	  ++i;
 	}
-      } else {
+      } else if ( data[i+1] instanceof String[] ) {
+	Files.write(target.toPath(),Arrays.asList((String[])data[i+1]));
+	/*
+	try ( PrintStream out = new PrintStream(target) ) {
+	  for ( String line : (String[])data[i+1] ) {
+	    out.println(line);
+	  }
+	}
+	*/
+      } else if ( data[i+1] instanceof Object[] ) {
 	assertTrue("mkdir "+target,target.mkdir());
 	createFiles(target,(Object[])data[i+1]);
+      } else {
+	fail("unknown data type : "+data[i+1].getClass().getName());
       }
     }
   }

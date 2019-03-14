@@ -1,25 +1,26 @@
 package mylib.backuper;
 
-import static java.nio.file.StandardOpenOption.CREATE;
-import static java.nio.file.StandardOpenOption.APPEND;
-import java.io.Closeable;
 import java.io.IOException;
-import java.io.PrintStream;
-import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
-import java.text.SimpleDateFormat;
 import java.util.Arrays;
 import java.util.Comparator;
 import java.util.Date;
 import java.util.LinkedList;
 import java.util.ListIterator;
-import mylib.backuper.DataBase.Storage;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.slf4j.event.Level;
+
 import mylib.backuper.DataBase.File;
 import mylib.backuper.DataBase.Folder;
+import mylib.backuper.DataBase.Storage;
 
 public class Backuper
 {
+  private final static Logger log = LoggerFactory.getLogger(Backuper.class);
+
   public static void main( String argv[] )
   {
     LinkedList<String> args = new LinkedList<>();
@@ -38,10 +39,6 @@ public class Backuper
 
     Path dbFolder = Paths.get(arg);
 
-    try ( Logger log = new Logger(dbFolder.resolve("backup.log")) )
-    {
-      log.debugMode = debugMode;
-      Backuper.log = log;
       try {
 	DataBase db = new DataBase(dbFolder);
 
@@ -65,9 +62,8 @@ public class Backuper
 	backup(srcStorage,dstStorage);
 
       } catch ( Exception ex ) {
-	log.error(ex);
+	log.error(ex.getMessage(),ex);
       }
-    }
   }
 
   public static void backup( Storage srcStorage, Storage dstStorage )
@@ -190,66 +186,5 @@ public class Backuper
       }
     }
     return copylist;
-  }
-
-  // ======================================================================
-  public static SimpleDateFormat STDFORMAT = new SimpleDateFormat("yyyy/MM/dd HH:mm:ss.SSS");
-
-  public static Logger log;
-
-  public static class Logger implements Closeable
-  {
-    PrintStream out;
-    boolean debugMode = false;
-
-    public Logger( Path logPath )
-    {
-      try {
-	this.out = new PrintStream(Files.newOutputStream(logPath,CREATE,APPEND));
-	info("Start Logging");
-      } catch ( IOException ex ) {
-	ex.printStackTrace();
-      }
-    }
-
-    public void debug( String str )
-    {
-      if ( debugMode ) out.println(STDFORMAT.format(new Date())+" DEBUG "+str);
-    }
-
-    public void message( String str )
-    {
-      System.err.println(str);
-      out.println(STDFORMAT.format(new Date())+" MSG   "+str);
-    }
-
-    public void info( String str )
-    {
-      out.println(STDFORMAT.format(new Date())+" INFO  "+str);
-    }
-
-    public void info( Exception ex )
-    {
-      System.err.println(ex.getClass().getName()+": "+ex.getMessage());
-      ex.printStackTrace(out);
-    }
-
-    public void error( String str )
-    {
-      System.err.println(str);
-      out.println(STDFORMAT.format(new Date())+" ERROR "+str);
-    }
-
-    public void error( Exception ex )
-    {
-      ex.printStackTrace();
-      ex.printStackTrace(out);
-    }
-
-    public void close()
-    {
-      log.info("Stop Logging");
-      out.close();
-    }
   }
 }

@@ -1,8 +1,5 @@
 package mylib.backuper;
 
-import static mylib.backuper.Backuper.STDFORMAT;
-import static mylib.backuper.Backuper.log;
-
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
@@ -14,6 +11,7 @@ import java.nio.file.Paths;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.text.ParseException;
+import java.text.SimpleDateFormat;
 import java.util.Base64;
 import java.util.Date;
 import java.util.HashMap;
@@ -24,8 +22,16 @@ import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 public class DataBase extends HashMap<String,DataBase.Storage>
 {
+  // ======================================================================
+  private final static Logger log = LoggerFactory.getLogger(DataBase.class);
+
+  public final static SimpleDateFormat STDFORMAT = new SimpleDateFormat("yyyy/MM/dd HH:mm:ss.SSS");
+
   // ======================================================================
   public abstract class Storage
   {
@@ -76,7 +82,7 @@ public class DataBase extends HashMap<String,DataBase.Storage>
       ) {
 	stream.forEach(list::add);
       } catch ( NoSuchFileException ex ) {
-	log.info(ex);
+	log.warn(ex.getClass().getName()+": "+ex.getMessage());
       }
       folders = new LinkedList<Folder>();
       Folder folder = null;
@@ -140,9 +146,9 @@ public class DataBase extends HashMap<String,DataBase.Storage>
       dstFile.length = srcFile.length;
       dstFile.lastModified = srcFile.lastModified;
 
-      log.message(command+filePath);
+      log.info(command+filePath);
       if ( dstStorage.mkParentDir(dstFile.filePath) ) {
-	log.message("mkdir "+dstFile.filePath.getParent());
+	log.info("mkdir "+dstFile.filePath.getParent());
       }
       try ( 
 	InputStream  in  = this.newInputStream(srcFile.filePath);
@@ -178,7 +184,7 @@ public class DataBase extends HashMap<String,DataBase.Storage>
     public void deleteFile( Path delPath )
     throws IOException
     {
-      log.message("delete "+delPath);
+      log.info("delete "+delPath);
       deleteRealFile(delPath);
       Path parentPath = delPath.getParent();
       if ( parentPath == null ) parentPath = Paths.get(".");
@@ -211,7 +217,7 @@ public class DataBase extends HashMap<String,DataBase.Storage>
 	      .sorted((x,y) -> -x.compareTo(y))
 	      .collect(Collectors.toList())
       ) {
-	if ( deleteRealFile(path) ) log.message("rmdir "+path);
+	if ( deleteRealFile(path) ) log.info("rmdir "+path);
       }
     }
 
@@ -469,7 +475,7 @@ public class DataBase extends HashMap<String,DataBase.Storage>
 	log.info("Read Config "+key+"="+defstr);
       }
     } catch ( IOException ex ) {
-      log.error(ex);
+      log.error(ex.getMessage(),ex);
     }
   }
 }

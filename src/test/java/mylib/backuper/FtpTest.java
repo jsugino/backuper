@@ -36,11 +36,8 @@ public class FtpTest
 	.forEach(out::println);
     }
 
-    try ( Backuper.Logger log = new Backuper.Logger(dbdir.toPath().resolve("backup.log")) ) {
-      Backuper.log = log;
-      DataBase db = new DataBase(dbdir.toPath());
-      Storage dstStorage = db.get("test.dst");
-      System.out.println("root = "+dstStorage.getRoot());
-    }
+    DataBase db = new DataBase(dbdir.toPath());
+    Storage dstStorage = db.get("test.dst");
+    System.out.println("root = "+dstStorage.getRoot());
   }
 }
