@@ -89,13 +89,14 @@ public class Backuper
     dstStorage.writeDB();
 
     System.err.println("[compare]");
+    log.info("Compare Files "+srcStorage.storageName+" "+dstStorage.storageName);
     LinkedList<File> frlist = toFileList(srcStorage);
     LinkedList<File> tolist = toFileList(dstStorage);
     LinkedList<File> copylist = compare(frlist,tolist);
 
     // frlist means "copy"
     System.err.println("[copy]");
-    log.info("start copy from "+srcStorage.getRoot()+" to "+dstStorage.getRoot());
+    log.debug("start copy from "+srcStorage.getRoot()+" to "+dstStorage.getRoot());
     for ( File file : frlist ) {
       //file.dump(System.err);
       srcStorage.copyFile(file.filePath,dstStorage);
@@ -103,7 +104,7 @@ public class Backuper
 
     // copylist means "copy override"
     System.err.println("[copy override]");
-    log.info("start copy override from "+srcStorage.getRoot()+" to "+dstStorage.getRoot());
+    log.debug("start copy override from "+srcStorage.getRoot()+" to "+dstStorage.getRoot());
     for ( File file : copylist ) {
       //file.dump(System.err);
       srcStorage.copyFile(file.filePath,dstStorage);
@@ -111,7 +112,7 @@ public class Backuper
 
     // tolist means "delete"
     System.err.println("[delete]");
-    log.info("start delete from "+dstStorage.getRoot());
+    log.debug("start delete from "+dstStorage.getRoot());
     for ( File file : tolist ) {
       //file.dump(System.err);
       dstStorage.deleteFile(file.filePath);

@@ -91,7 +91,7 @@ public class DataBase extends HashMap<String,DataBase.Storage>
 	int i1;
 	if ( (i1 = line.indexOf('\t')) < 0 ) {
 	  folder = new Folder(Paths.get(line));
-	  log.debug("new Folder("+folder.folderPath+")");
+	  log.debug("new folder "+folder.folderPath);
 	  folders.add(folder);
 	} else {
 	  int i2 = line.indexOf('\t',i1+1);
@@ -100,7 +100,7 @@ public class DataBase extends HashMap<String,DataBase.Storage>
 	    folder.folderPath.equals(curPath)
 	    ? Paths.get(line.substring(i3+1))
 	    : folder.folderPath.resolve(line.substring(i3+1)));
-	  log.debug("new File("+file.filePath+")");
+	  log.debug("new file "+file.filePath);
 	  folder.files.add(file);
 	  log.debug("read "+file.filePath);
 	  file.hashValue = line.substring(0,i1);
@@ -128,7 +128,7 @@ public class DataBase extends HashMap<String,DataBase.Storage>
     public void copyFile( Path filePath, Storage dstStorage )
     throws IOException
     {
-      log.debug("copyFile("+filePath+")");
+      log.debug("copyFile "+filePath);
       Storage srcStorage = this;
       Path parentPath = filePath.getParent();
       if ( parentPath == null ) parentPath = Paths.get(".");
@@ -176,7 +176,7 @@ public class DataBase extends HashMap<String,DataBase.Storage>
 
       if ( dstFile.lastModified == srcFile.lastModified ) return;
 
-      log.info("set last modified "+dstFile.filePath);
+      log.info("set lastModified "+dstFile.filePath);
       dstFile.lastModified = srcFile.lastModified;
       dstStorage.setLastModified(dstFile.filePath,dstFile.lastModified);
     }
@@ -225,7 +225,8 @@ public class DataBase extends HashMap<String,DataBase.Storage>
     public void scanFolder()
     throws IOException
     {
-      log.info("Scan Folder "+storageName/*+" "+rootFolder*/);
+      log.info("Scan Folder "+storageName);
+      log.debug("folder name "+getRoot());
 
       LinkedList<Folder> origFolders = folders;
       folders = new LinkedList<Folder>();
@@ -233,7 +234,7 @@ public class DataBase extends HashMap<String,DataBase.Storage>
       folderList.add(new Folder(Paths.get(".")));
       while ( folderList.size() > 0 ) {
 	Folder folder = folderList.remove();
-	log.debug("new Folder("+folder.folderPath+")");
+	log.debug("new Folder "+folder.folderPath);
 	registerToList(folders,folder);
 	nextPath:
 	for ( PathHolder holder : getPathHolderList(folder.folderPath) ) {
@@ -242,7 +243,7 @@ public class DataBase extends HashMap<String,DataBase.Storage>
 	    log.debug("scan folder "+relpath);
 	    for ( Pattern pat : ignoreFolderPats ) {
 	      if ( pat.matcher(relpath.toString()).matches() ) {
-		log.info("ignore folder "+relpath);
+		log.info("Ignore folder "+relpath);
 		continue nextPath;
 	      }
 	    }
@@ -250,7 +251,7 @@ public class DataBase extends HashMap<String,DataBase.Storage>
 	  } else if ( holder instanceof File ) {
 	    File file = (File)holder;
 	    if ( file.type == File.FileType.SYMLINK ) {
-	      log.info("ignore symbolic link : "+holder.getPath());
+	      log.info("ignore symlink "+holder.getPath());
 	      continue nextPath;
 	    }
 	    log.debug("scan file "+relpath);
@@ -260,7 +261,7 @@ public class DataBase extends HashMap<String,DataBase.Storage>
 		continue nextPath;
 	      }
 	    }
-	    log.debug("new File("+relpath+")");
+	    log.debug("new File "+relpath);
 	    registerToList(folder.files,file);
 	    Folder origfolder = null;
 	    File origfile = null;
@@ -295,7 +296,7 @@ public class DataBase extends HashMap<String,DataBase.Storage>
     public String getMD5( Path path )
     throws IOException
     {
-      log.info("Calculate MD5 "+path);
+      log.info("calculate MD5 "+path);
 
       digest.reset();
       try ( InputStream in = newInputStream(path) )
@@ -407,7 +408,7 @@ public class DataBase extends HashMap<String,DataBase.Storage>
   public DataBase( Path dbFolder )
   {
     this.dbFolder = dbFolder;
-    log.info("Initialize DataBase "+dbFolder+'/'+CONFIGNAME);
+    log.debug("Initialize DataBase "+dbFolder+'/'+CONFIGNAME);
 
     try {
       try {
@@ -435,7 +436,7 @@ public class DataBase extends HashMap<String,DataBase.Storage>
 	      line = "(.+/)?"+line;
 	    }
 	    Pattern pat = Pattern.compile(line);
-	    log.info("ignore folder pattern : "+pat);
+	    log.debug("ignore folder pattern : "+pat);
 	    storage.ignoreFolderPats.add(pat);
 	  } else {
 	    line = line.replaceAll("\\.","\\\\.");
@@ -446,7 +447,7 @@ public class DataBase extends HashMap<String,DataBase.Storage>
 	      line = "(.+/)?"+line;
 	    }
 	    Pattern pat = Pattern.compile(line);
-	    log.info("ignore file pattern : "+pat);
+	    log.debug("ignore file pattern : "+pat);
 	    storage.ignoreFilePats.add(pat);
 	  }
 	  continue;
@@ -472,7 +473,7 @@ public class DataBase extends HashMap<String,DataBase.Storage>
 	  storage = new LocalStorage(this,key,path);
 	}
 	this.put(storage.storageName,storage);
-	log.info("Read Config "+key+"="+defstr);
+	log.debug("Read Config "+key+"="+defstr);
       }
     } catch ( IOException ex ) {
       log.error(ex.getMessage(),ex);
