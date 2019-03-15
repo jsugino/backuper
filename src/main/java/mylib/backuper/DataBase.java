@@ -76,15 +76,14 @@ public class DataBase extends HashMap<String,DataBase.Storage>
     {
       log.info("Read DataBase "+storageName);
 
-      LinkedList<String> list = new LinkedList<>();
-      try (
-	Stream<String> stream = Files.lines(dbFolder.resolve(storageName+".db"))
-      ) {
-	stream.forEach(list::add);
+      List<String> list;
+      try {
+	list = Files.readAllLines(dbFolder.resolve(storageName+".db"));
       } catch ( NoSuchFileException ex ) {
 	log.warn(ex.getClass().getName()+": "+ex.getMessage());
+	return;
       }
-      folders = new LinkedList<Folder>();
+      this.folders = new LinkedList<Folder>();
       Folder folder = null;
       Path curPath = Paths.get(".");
       for ( String line : list ) {
@@ -92,7 +91,7 @@ public class DataBase extends HashMap<String,DataBase.Storage>
 	if ( (i1 = line.indexOf('\t')) < 0 ) {
 	  folder = new Folder(Paths.get(line));
 	  log.debug("new folder "+folder.folderPath);
-	  folders.add(folder);
+	  this.folders.add(folder);
 	} else {
 	  int i2 = line.indexOf('\t',i1+1);
 	  int i3 = line.indexOf('\t',i2+1);
@@ -416,12 +415,8 @@ public class DataBase extends HashMap<String,DataBase.Storage>
       } catch ( NoSuchAlgorithmException ex ) {
 	throw new IOException("Cannot initialize 'digest MD5'",ex);
       }
-      LinkedList<String> list = new LinkedList<>();
-      try (
-	Stream<String> stream = Files.lines(dbFolder.resolve(CONFIGNAME))
-      ) { stream.forEach(list::add); }
       Storage storage = null;
-      for ( String line : list ) {
+      for ( String line : Files.readAllLines(dbFolder.resolve(CONFIGNAME)) ) {
 	if ( line.length() == 0 || line.startsWith("##") ) return;
 	int idx = line.indexOf('=');
 	if ( idx <= 0 ) {

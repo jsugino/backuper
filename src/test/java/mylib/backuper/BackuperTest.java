@@ -90,9 +90,9 @@ public class BackuperTest
     for ( int i = 0; i < expects.length-1; ++i ) {
       if ( !(expects[i] instanceof String) ) fail("expects["+i+"] must be String : "+expects[i]);
       String startPat = (String)expects[i];
-      String actstr[] = null;
+      String expstrs[] = new String[]{};
       if ( expects[i+1] instanceof String[] ) {
-	actstr = (String[])expects[i+1];
+	expstrs = (String[])expects[i+1];
 	++i;
       }
       String endPat = null;
@@ -100,13 +100,11 @@ public class BackuperTest
 	endPat = (String)expects[i+1];
       }
       HashSet<String> actual = new HashSet<>(selectEvents(startPat,endPat));
-      if ( actstr != null ) {
-	List<String> remain = Arrays.stream(actstr)
-	  .filter(exp->!actual.remove(exp))
-	  .collect(Collectors.toList());
-	if ( remain.size() > 0 ) fail(String.format("less actuals from \"%s\" to \"%s\" : %s ",startPat,endPat,remain));
-      }
-      if ( actual.size() > 0 ) fail(String.format("more actuals from \"%s\" to \"%s\" : %s ",startPat,endPat,actual));
+      List<String> remain = Arrays.stream(expstrs)
+	.filter(exp->!actual.remove(exp))
+	.collect(Collectors.toList());
+      if ( remain.size() > 0 || actual.size() > 0 )
+	fail(String.format("different events from \"%s\" to \"%s\" : expects = %s, actual = %s ",startPat,endPat,remain,actual));
     }
   }
 
@@ -412,10 +410,12 @@ public class BackuperTest
 	++i;
       }
     }
+    LinkedList<File> remain = new LinkedList<>();
     for ( File file : dir.listFiles() ) {
       Object exp = map.remove(file.getName());
-      if ( exp == null ) fail("more file/folder in actual : "+file);
-      if ( exp instanceof String ) {
+      if ( exp == null ) {
+	remain.add(file);
+      } else if ( exp instanceof String ) {
 	if ( !file.isFile() ) fail("not a file in actual "+file);
 	assertEquals(file.toString(),
 	  (String)exp,
@@ -429,7 +429,8 @@ public class BackuperTest
 	compareFiles(file,(Object[])exp);
       }
     }
-    if ( map.size() > 0 ) fail("more file/folder in expects "+map);
+    if ( map.size() > 0 || remain.size() > 0 )
+      fail(String.format("different files : expects = %s, actual = %s ",map,remain));
   }
 
   public void checkContents( File file, String expects[] )
