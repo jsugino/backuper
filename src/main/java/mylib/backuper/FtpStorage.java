@@ -4,18 +4,21 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.nio.file.Path;
-import java.util.Arrays;
 import java.util.List;
 
 import org.apache.commons.net.ftp.FTPClient;
 import org.apache.commons.net.ftp.FTPFile;
 import org.apache.commons.net.ftp.FTPReply;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import mylib.backuper.DataBase.PathHolder;
 import mylib.backuper.DataBase.Storage;
 
 public class FtpStorage extends Storage
 {
+  private final static Logger log = LoggerFactory.getLogger(FtpStorage.class);
+
   public static void connect()
   throws IOException
   {
@@ -23,24 +26,24 @@ public class FtpStorage extends Storage
     client.connect("comb.sakura.ne.jp");
     client.login("comb","rg@k123");
     if ( !FTPReply.isPositiveCompletion(client.getReplyCode()) ) {
-      System.out.println("Login Failed");
+      log.error("Login Failed : "+client.getReplyCode());
       client.disconnect();
       return;
     }
     FTPFile files[] = client.listFiles();
     if ( !FTPReply.isPositiveCompletion(client.getReplyCode()) ) {
-      System.out.println("List Failed");
+      log.error("List Failed : "+client.getReplyCode());
       client.disconnect();
       return;
     }
     for ( FTPFile file : files ) {
       long time = file.getTimestamp().getTimeInMillis();
-      System.out
-	.format("%tF %tT",time,time)
-	.format(" %10d",file.getSize())
-	.append(file.isDirectory()?" <dir>":file.isFile()?"      ":" ?????")
-	.format(" %s",file.getName())
-	.println();
+      log.info(String.format(
+	  "%tF %tT %10d %5s %s",
+	  time,time,
+	  file.getSize(),
+	  file.isDirectory()?"<dir>":file.isFile()?"      ":" ?????",
+	  file.getName()));
     }
   }
 

@@ -19,7 +19,6 @@ import java.util.LinkedList;
 import java.util.List;
 import java.util.stream.Collectors;
 
-import org.junit.After;
 import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.Rule;
@@ -68,28 +67,32 @@ public class BackuperTest
     System.out.println("-- log event (end) --");
   }
 
-  public List<String> selectEvents( String startPat, String endPat )
+  public static List<String> selectEvents( Iterator<ILoggingEvent> iterator, String startPat, String endPat )
   {
     LinkedList<String> result = new LinkedList<>();
-    Boolean inner = false;
-    for ( ILoggingEvent ev : event.list ) {
-      if ( ev.getLevel().toInt() < Level.INFO_INT ) continue;
+    Boolean inner = (startPat == null);
+    while ( iterator.hasNext() ) {
+      ILoggingEvent ev = iterator.next();
+      if ( ev.getLevel().toInt() < Level.DEBUG_INT ) continue;
       String msg = ev.getFormattedMessage();
       if ( inner ) {
-	if ( msg.equals(endPat) ) break;
+	if ( msg.equals(endPat) ) return result;
 	result.add(msg);
       } else if ( msg.equals(startPat) ) {
 	inner = true;
       }
     }
+    if ( !inner ) fail("no start statement : "+startPat);
+    if ( endPat != null ) fail("no end statement : "+endPat);
     return result;
   }
 
   public void checkEvent( Object expects[] )
   {
+    Iterator<ILoggingEvent> iterator = event.list.iterator();
+    if ( !(expects[0] instanceof String) ) fail("expects[0] must be String : "+expects[0]);
+    String startPat = (String)expects[0];
     for ( int i = 0; i < expects.length-1; ++i ) {
-      if ( !(expects[i] instanceof String) ) fail("expects["+i+"] must be String : "+expects[i]);
-      String startPat = (String)expects[i];
       String expstrs[] = new String[]{};
       if ( expects[i+1] instanceof String[] ) {
 	expstrs = (String[])expects[i+1];
@@ -99,12 +102,13 @@ public class BackuperTest
       if ( i+1 < expects.length && expects[i+1] instanceof String ) {
 	endPat = (String)expects[i+1];
       }
-      HashSet<String> actual = new HashSet<>(selectEvents(startPat,endPat));
+      HashSet<String> actual = new HashSet<>(selectEvents(iterator,startPat,endPat));
       List<String> remain = Arrays.stream(expstrs)
 	.filter(exp->!actual.remove(exp))
 	.collect(Collectors.toList());
       if ( remain.size() > 0 || actual.size() > 0 )
 	fail(String.format("different events from \"%s\" to \"%s\" : expects = %s, actual = %s ",startPat,endPat,remain,actual));
+      startPat = null;
     }
   }
 
@@ -211,37 +215,38 @@ public class BackuperTest
       });
 
     checkEvent(new Object[]{
-	"Read DataBase test.src", new String[]{
+	"Start Backup test.src test.dst",
+	"Read DataBase test.src "+dbdir+"/test.src.db", new String[]{
 	  "java.nio.file.NoSuchFileException: "+dbdir+"/test.src.db",
 	},
-	"Scan Folder test.src", new String[]{
-	  "ignore file a",
+	"Scan Folder test.src "+srcdir.getAbsolutePath(), new String[]{
+	  "Ignore file a",
 	  "calculate MD5 b",
-	  "ignore symlink l",
-	  "ignore symlink lc",
-	  "ignore file c/c1",
+	  "Ignore symlink l",
+	  "Ignore symlink lc",
+	  "Ignore file c/c1",
 	  "calculate MD5 c/c2",
 	  "calculate MD5 c/c3",
 	  "calculate MD5 c/c4",
 	  "calculate MD5 c/d/d",
-	  "ignore symlink c/d/lc",
-	  "ignore symlink c/d/lc1",
-	  "ignore symlink c/d/lx",
+	  "Ignore symlink c/d/lc",
+	  "Ignore symlink c/d/lc1",
+	  "Ignore symlink c/d/lx",
 	},
-	"Write DataBase test.src",
-	"Read DataBase test.dst", new String[]{
+	"Write DataBase test.src "+dbdir+"/test.src.db",
+	"Read DataBase test.dst "+dbdir+"/test.dst.db", new String[]{
 	  "java.nio.file.NoSuchFileException: "+dbdir+"/test.dst.db",
 	},
-	"Scan Folder test.dst", new String[]{
-	  "ignore file x",
-	  "ignore file y/y1",
+	"Scan Folder test.dst "+dstdir.getAbsolutePath(), new String[]{
+	  "Ignore file x",
+	  "Ignore file y/y1",
 	  "calculate MD5 y/y2",
 	  "calculate MD5 c/c2",
 	  "calculate MD5 c/c3",
 	  "calculate MD5 c/c4",
 	  "calculate MD5 z/z1",
 	},
-	"Write DataBase test.dst",
+	"Write DataBase test.dst "+dbdir+"/test.dst.db",
 	"Compare Files test.src test.dst", new String[]{
 	  "copy b",
 	  "copy override c/c2",
@@ -252,7 +257,8 @@ public class BackuperTest
 	  "rmdir z",
 	  "delete z/z1",
 	},
-	"Write DataBase test.dst",
+	"Write DataBase test.dst "+dbdir+"/test.dst.db",
+	"End Backup test.src test.dst",
       });
   }
 

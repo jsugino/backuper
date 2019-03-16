@@ -69,50 +69,39 @@ public class Backuper
   public static void backup( Storage srcStorage, Storage dstStorage )
   throws IOException
   {
-    System.err.println("[read src DB]");
+    log.info("Start Backup "+srcStorage.storageName+" "+dstStorage.storageName);
     srcStorage.readDB();
-    System.err.println(srcStorage.storageName+"="+srcStorage.getRoot());
-    System.err.println("[scan src Folder]");
     srcStorage.scanFolder();
-    System.err.println("[write src DB]");
     srcStorage.cleanupFolder(false);
     srcStorage.writeDB();
 
     if ( dstStorage == null ) return;
 
-    System.err.println("[read dst DB]");
     dstStorage.readDB();
-    System.err.println(dstStorage.storageName+"="+dstStorage.getRoot());
-    System.err.println("[scan dst Folder]");
     dstStorage.scanFolder();
-    System.err.println("[write dst DB]");
     dstStorage.writeDB();
 
-    System.err.println("[compare]");
-    log.info("Compare Files "+srcStorage.storageName+" "+dstStorage.storageName);
+    log.debug("Compare Files "+srcStorage.storageName+" "+dstStorage.storageName);
     LinkedList<File> frlist = toFileList(srcStorage);
     LinkedList<File> tolist = toFileList(dstStorage);
     LinkedList<File> copylist = compare(frlist,tolist);
 
     // frlist means "copy"
-    System.err.println("[copy]");
-    log.debug("start copy from "+srcStorage.getRoot()+" to "+dstStorage.getRoot());
+    log.trace("start copy from "+srcStorage.getRoot()+" to "+dstStorage.getRoot());
     for ( File file : frlist ) {
       //file.dump(System.err);
       srcStorage.copyFile(file.filePath,dstStorage);
     }
 
     // copylist means "copy override"
-    System.err.println("[copy override]");
-    log.debug("start copy override from "+srcStorage.getRoot()+" to "+dstStorage.getRoot());
+    log.trace("start copy override from "+srcStorage.getRoot()+" to "+dstStorage.getRoot());
     for ( File file : copylist ) {
       //file.dump(System.err);
       srcStorage.copyFile(file.filePath,dstStorage);
     }
 
     // tolist means "delete"
-    System.err.println("[delete]");
-    log.debug("start delete from "+dstStorage.getRoot());
+    log.trace("start delete from "+dstStorage.getRoot());
     for ( File file : tolist ) {
       //file.dump(System.err);
       dstStorage.deleteFile(file.filePath);
@@ -125,9 +114,11 @@ public class Backuper
       }
     }
 
-    System.err.println("[clean folder]");
+    log.trace("clean folder "+dstStorage.getRoot());
     dstStorage.cleanupFolder(true);
     dstStorage.writeDB();
+
+    log.info("End Backup "+srcStorage.storageName+" "+dstStorage.storageName);
   }
 
   public static void usage()
@@ -173,7 +164,7 @@ public class Backuper
       File frfile = fritr.next();
       File tofile = toitr.next();
       int cmp = frfile.filePath.compareTo(tofile.filePath);
-      log.debug("compare "+frfile.filePath+((cmp < 0) ? " < " : (cmp > 0) ? " > " : " = ")+tofile.filePath);
+      log.trace("compare "+frfile.filePath+((cmp < 0) ? " < " : (cmp > 0) ? " > " : " = ")+tofile.filePath);
       if ( cmp == 0 ) {
 	if ( !frfile.hashValue.equals(tofile.hashValue) ) {
 	  copylist.add(frfile);
