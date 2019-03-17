@@ -1,13 +1,14 @@
 package mylib.backuper;
 
 import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
 import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.NoSuchFileException;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.nio.file.attribute.FileTime;
 import java.text.SimpleDateFormat;
 import java.util.Arrays;
@@ -17,7 +18,9 @@ import java.util.HashSet;
 import java.util.Iterator;
 import java.util.LinkedList;
 import java.util.List;
+import java.util.Map;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 import org.junit.Before;
 import org.junit.BeforeClass;
@@ -40,6 +43,7 @@ public class BackuperTest
   public static ListAppender<ILoggingEvent> event = new ListAppender<>();
 
   @BeforeClass
+  // ログの内容をチェックするための準備
   public static void initLogger()
   {
     ch.qos.logback.classic.Logger log = (ch.qos.logback.classic.Logger)LoggerFactory.getLogger("root");
@@ -57,62 +61,9 @@ public class BackuperTest
     event.list.clear();
   }
 
-  //@After
-  public void printEvent()
-  {
-    System.out.println("-- log event (start) --");
-    for ( ILoggingEvent event : event.list ) {
-      System.out.println("event : "+event);
-    }
-    System.out.println("-- log event (end) --");
-  }
-
-  public static List<String> selectEvents( Iterator<ILoggingEvent> iterator, String startPat, String endPat )
-  {
-    LinkedList<String> result = new LinkedList<>();
-    Boolean inner = (startPat == null);
-    while ( iterator.hasNext() ) {
-      ILoggingEvent ev = iterator.next();
-      if ( ev.getLevel().toInt() < Level.DEBUG_INT ) continue;
-      String msg = ev.getFormattedMessage();
-      if ( inner ) {
-	if ( msg.equals(endPat) ) return result;
-	result.add(msg);
-      } else if ( msg.equals(startPat) ) {
-	inner = true;
-      }
-    }
-    if ( !inner ) fail("no start statement : "+startPat);
-    if ( endPat != null ) fail("no end statement : "+endPat);
-    return result;
-  }
-
-  public void checkEvent( Object expects[] )
-  {
-    Iterator<ILoggingEvent> iterator = event.list.iterator();
-    if ( !(expects[0] instanceof String) ) fail("expects[0] must be String : "+expects[0]);
-    String startPat = (String)expects[0];
-    for ( int i = 0; i < expects.length-1; ++i ) {
-      String expstrs[] = new String[]{};
-      if ( expects[i+1] instanceof String[] ) {
-	expstrs = (String[])expects[i+1];
-	++i;
-      }
-      String endPat = null;
-      if ( i+1 < expects.length && expects[i+1] instanceof String ) {
-	endPat = (String)expects[i+1];
-      }
-      HashSet<String> actual = new HashSet<>(selectEvents(iterator,startPat,endPat));
-      List<String> remain = Arrays.stream(expstrs)
-	.filter(exp->!actual.remove(exp))
-	.collect(Collectors.toList());
-      if ( remain.size() > 0 || actual.size() > 0 )
-	fail(String.format("different events from \"%s\" to \"%s\" : expects = %s, actual = %s ",startPat,endPat,remain,actual));
-      startPat = null;
-    }
-  }
-
   // ----------------------------------------------------------------------
+  // Backuper のテスト
+
   @Test
   public void testSimple()
   throws IOException
@@ -155,8 +106,8 @@ public class BackuperTest
 	"dst", new Object[]{
 	  "x", "xx",
 	  "y", new Object[]{
-	    "y1", "",
-	    "y2", "",
+	    "y1", "y1data",
+	    "y2", "y2data",
 	  },
 	  "c", new Object[]{
 	    "c2", "ccc",
@@ -210,7 +161,7 @@ public class BackuperTest
 	},
 	"x", "xx",
 	"y", new Object[]{
-	  "y1", "",
+	  "y1", "y1data",
 	},
       });
 
@@ -305,6 +256,8 @@ public class BackuperTest
       });
 
     /*
+    // 以下は、同一名でディレクトリとファイルが違っていた場合の対応ができてから実行する。
+
     System.out.println("--- ORIG ---");
     printFolders(root);
 
@@ -333,7 +286,10 @@ public class BackuperTest
     */
   }
 
-  public void execute( File root, File dbdir )
+  // ----------------------------------------------------------------------
+  // ユーティリティメソッド
+
+  public static void execute( File root, File dbdir )
   throws IOException
   {
     DataBase db = new DataBase(dbdir.toPath());
@@ -342,13 +298,61 @@ public class BackuperTest
     Backuper.backup(srcStorage,dstStorage);
   }
 
-  public Date lastModified( File file, String name )
+  // ログの取得
+  public static List<String> selectEvents( Iterator<ILoggingEvent> iterator, String startPat, String endPat )
+  {
+    LinkedList<String> result = new LinkedList<>();
+    Boolean inner = (startPat == null);
+    while ( iterator.hasNext() ) {
+      ILoggingEvent ev = iterator.next();
+      if ( ev.getLevel().toInt() < Level.DEBUG_INT ) continue;
+      String msg = ev.getFormattedMessage();
+      if ( inner ) {
+	if ( msg.equals(endPat) ) return result;
+	result.add(msg);
+      } else if ( msg.equals(startPat) ) {
+	inner = true;
+      }
+    }
+    if ( !inner ) fail("no start statement : "+startPat);
+    if ( endPat != null ) fail("no end statement : "+endPat);
+    return result;
+  }
+
+  // ログイベントの確認
+  public static void checkEvent( Object expects[] )
+  {
+    Iterator<ILoggingEvent> iterator = event.list.iterator();
+    if ( !(expects[0] instanceof String) ) fail("expects[0] must be String : "+expects[0]);
+    String startPat = (String)expects[0];
+    for ( int i = 0; i < expects.length-1; ++i ) {
+      String expstrs[] = new String[]{};
+      if ( expects[i+1] instanceof String[] ) {
+	expstrs = (String[])expects[i+1];
+	++i;
+      }
+      String endPat = null;
+      if ( i+1 < expects.length && expects[i+1] instanceof String ) {
+	endPat = (String)expects[i+1];
+      }
+      HashSet<String> actual = new HashSet<>(selectEvents(iterator,startPat,endPat));
+      List<String> remain = Arrays.stream(expstrs)
+	.filter(exp->!actual.remove(exp))
+	.collect(Collectors.toList());
+      if ( remain.size() > 0 || actual.size() > 0 )
+	fail(String.format("different events from \"%s\" to \"%s\" : expects = %s, actual = %s ",startPat,endPat,remain,actual));
+      startPat = null;
+    }
+  }
+
+  // 更新日時の取得と設定
+  public static Date lastModified( File file, String name )
   throws IOException
   {
     return lastModified(new File(file,name));
   }
 
-  public Date lastModified( File file )
+  public static Date lastModified( File file )
   throws IOException
   {
     try {
@@ -359,87 +363,69 @@ public class BackuperTest
     }
   }
 
-  public void lastModified( File file, Date date )
+  public static void lastModified( File file, Date date )
   throws IOException
   {
     Files.setLastModifiedTime(file.toPath(),FileTime.fromMillis(date.getTime()));
   }
 
-  public void createFiles( File dir, Object data[] )
+  // ファイルの生成
+  public static void createFiles( File dir, Object data[] )
   throws IOException
   {
-    for ( int i = 0; i < data.length; i += 2 ) {
-      String name = (String)data[i];
-      if ( name.charAt(0) == '@' ) {
-	name = name.substring(1,name.length());
-	Files.createSymbolicLink(
-	  new File(dir,name).getAbsoluteFile().toPath(),
-	  new File(dir,(String)data[i+1]).getAbsoluteFile().toPath());
-	continue;
-      }
-      File target = new File(dir,name);
-      if ( data[i+1] instanceof String ) {
-	Files.write(target.toPath(),data[i+1].toString().getBytes());
-	if ( i+2 < data.length && data[i+2] instanceof Date ) {
-	  lastModified(target,(Date)data[i+2]);
-	  ++i;
-	}
-      } else if ( data[i+1] instanceof String[] ) {
-	Files.write(target.toPath(),Arrays.asList((String[])data[i+1]));
-	/*
-	try ( PrintStream out = new PrintStream(target) ) {
-	  for ( String line : (String[])data[i+1] ) {
-	    out.println(line);
-	  }
-	}
-	*/
-      } else if ( data[i+1] instanceof Object[] ) {
-	assertTrue("mkdir "+target,target.mkdir());
-	createFiles(target,(Object[])data[i+1]);
+    for ( Entry ent : Entry.walkData(data,true) ) {
+      File target = new File(dir,ent.path.toString());
+      if ( ent.contents == null ) {
+	target.mkdir();
+      } else if ( ent.isSymlink ) {
+	Files.createSymbolicLink(target.getAbsoluteFile().toPath(),Paths.get(ent.contents));
       } else {
-	fail("unknown data type : "+data[i+1].getClass().getName());
+	Files.write(target.toPath(),ent.contents.getBytes());
+	if ( ent.lastModified != null ) lastModified(target,ent.lastModified);
       }
     }
   }
 
-  SimpleDateFormat FORM = new SimpleDateFormat("yyyy/MM/dd HH:mm:ss.SSS");
-
-  public void compareFiles( File dir, Object data[] )
+  // 実際に保存されているファイルの確認
+  public static void compareFiles( File dir, Object data[] )
   throws IOException
   {
-    HashMap<String,Object> map = new HashMap<>();
-    HashMap<String,Date> dmap = new HashMap<>();
-    for ( int i = 0; i < data.length; i += 2 ) {
-      map.put((String)data[i],data[i+1]);
-      if ( i+2 < data.length && data[i+2] instanceof Date ) {
-	dmap.put((String)data[i],(Date)data[i+2]);
-	++i;
-      }
-    }
-    LinkedList<File> remain = new LinkedList<>();
-    for ( File file : dir.listFiles() ) {
-      Object exp = map.remove(file.getName());
-      if ( exp == null ) {
-	remain.add(file);
-      } else if ( exp instanceof String ) {
-	if ( !file.isFile() ) fail("not a file in actual "+file);
-	assertEquals(file.toString(),
-	  (String)exp,
-	  new String(Files.readAllBytes(file.toPath())));
-	Date dt = dmap.get(file.getName());
-	if ( dt != null ) {
-	  assertEquals("timestamp for "+file+" "+FORM.format(dt)+" <=> "+FORM.format(lastModified(file)),dt,lastModified(file));
-	}
-      } else {
-	if ( !file.isDirectory() ) fail("not a directory in actual "+file);
-	compareFiles(file,(Object[])exp);
-      }
-    }
-    if ( map.size() > 0 || remain.size() > 0 )
-      fail(String.format("different files : expects = %s, actual = %s ",map,remain));
+    Map<Path,Entry> actual = collectFiles(dir);
+    List<Entry> expect = Entry.walkData(data);
+
+    expect = expect.stream()
+      .filter(exp->{
+	  Entry act = actual.remove(exp.path);
+	  if ( act == null ) return true;
+	  assertEquals("content for "+exp.path,exp,act);
+	  return false;})
+      .collect(Collectors.toList());
+    if ( expect.size() > 0 || actual.size() > 0 )
+      fail(String.format("different files : expect = %s, actual = %s ",expect,actual));
   }
 
-  public void checkContents( File file, String expects[] )
+  // ファイルを収集
+  public static Map<Path,Entry> collectFiles( File dir )
+  throws IOException
+  {
+    Path root = dir.toPath();
+    HashMap<Path,Entry> actual = new HashMap<>();
+    try ( Stream<Path> stream = Files.walk(root) ) {
+      stream
+	.filter(p->!Files.isDirectory(p))
+	.map(root::relativize)
+	.map(Entry::new)
+	.forEach(ent->actual.put(ent.path,ent));
+    }
+    for ( Entry ent : actual.values() ) {
+      ent.contents = new String(Files.readAllBytes(root.resolve(ent.path)));
+      ent.lastModified = lastModified(new File(dir,ent.path.toString()));
+    }
+    return actual;
+  }
+
+  // ファイルの内容の確認
+  public static void checkContents( File file, String expects[] )
   throws IOException
   {
     int i = 0;
@@ -459,7 +445,12 @@ public class BackuperTest
     if ( i < expects.length ) fail(String.format("less actual %d lines ",expects.length-i));
   }
 
-  public void printFolders( File dir )
+  // ----------------------------------------------------------------------
+  // デバッグ出力の為のユーティリティ
+
+  public static SimpleDateFormat FORM = new SimpleDateFormat("yyyy/MM/dd HH:mm:ss.SSS");
+
+  public static void printFolders( File dir )
   throws IOException
   {
     for ( File file : dir.listFiles() ) {
@@ -478,14 +469,13 @@ public class BackuperTest
     }
   }
 
-  public void cat( File file )
+  public static void cat( File file )
   throws IOException
   {
     System.out.println("----------[ "+file+" ]----------");
     Files.readAllLines(file.toPath()).stream().forEach(System.out::println);
   }
 
-  // ----------------------------------------------------------------------
   public static void printAppender( ch.qos.logback.classic.Logger log )
   {
     Iterator<Appender<ILoggingEvent>> itr = log.iteratorForAppenders();
@@ -514,5 +504,14 @@ public class BackuperTest
     log = LoggerFactory.getLogger("noname");
     System.out.println("logger class for noname = "+log.getClass().getName());
     log.info("This is a test message for noname");
+  }
+
+  public static void printEvent()
+  {
+    System.out.println("-- log event (start) --");
+    for ( ILoggingEvent event : event.list ) {
+      System.out.println("event : "+event);
+    }
+    System.out.println("-- log event (end) --");
   }
 }

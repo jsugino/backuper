@@ -47,7 +47,23 @@ public class FtpStorage extends Storage
     }
   }
 
-  
+  //                 user    pass    host    folder
+  // parsing "ftp://<..0..>:<..1..>@<..2..>/<..3..>"
+  //     idx        0      1       2       3
+  public static String[] parseURL( String url )
+  {
+    if ( !url.startsWith("ftp://") ) throw new IllegalArgumentException("not start with ftp : "+url);
+    int idx0 = "ftp://".length();
+    int idx1 = url.indexOf(':',idx0);
+    int idx3 = url.indexOf('/',idx1);
+    int idx2 = url.lastIndexOf('@',idx3);
+    return new String[]{
+      url.substring(idx0,idx1),
+      url.substring(idx1+1,idx2),
+      url.substring(idx2+1,idx3),
+      url.substring(idx3+1),
+    };
+  }
 
   public String hostname;
   public Path rootFolder;
