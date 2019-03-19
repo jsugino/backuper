@@ -39,31 +39,29 @@ public class Backuper
 
     Path dbFolder = Paths.get(arg);
 
-      try {
-	DataBase db = new DataBase(dbFolder);
+    try ( DataBase db = new DataBase(dbFolder) ) {
+      if ( (arg = args.poll()) == null ) { usage(); return; }
+      Storage srcStorage = db.get(arg);
+      if ( srcStorage == null ) {
+	log.error("Illegal Storage Name : "+arg);
+	usage();
+	return;
+      }
 
-	if ( (arg = args.poll()) == null ) { usage(); return; }
-	Storage srcStorage = db.get(arg);
-	if ( srcStorage == null ) {
-	  log.error("Illegal Storage Name : "+arg);
-	  usage();
+      Storage dstStorage = null;
+      if ( (arg = args.poll()) != null ) {
+	dstStorage = db.get(arg);
+	if ( dstStorage == null ) {
+	  log.error("Illegal Storage Name : "+args.getFirst());
 	  return;
 	}
-
-	Storage dstStorage = null;
-	if ( (arg = args.poll()) != null ) {
-	  dstStorage = db.get(arg);
-	  if ( dstStorage == null ) {
-	    log.error("Illegal Storage Name : "+args.getFirst());
-	    return;
-	  }
-	}
-
-	backup(srcStorage,dstStorage);
-
-      } catch ( Exception ex ) {
-	log.error(ex.getMessage(),ex);
       }
+
+      backup(srcStorage,dstStorage);
+
+    } catch ( Exception ex ) {
+      log.error(ex.getMessage(),ex);
+    }
   }
 
   public static void backup( Storage srcStorage, Storage dstStorage )
@@ -72,7 +70,6 @@ public class Backuper
     log.info("Start Backup "+srcStorage.storageName+" "+dstStorage.storageName);
     srcStorage.readDB();
     srcStorage.scanFolder();
-    srcStorage.cleanupFolder(false);
     srcStorage.writeDB();
 
     if ( dstStorage == null ) return;
@@ -115,7 +112,7 @@ public class Backuper
     }
 
     log.trace("clean folder "+dstStorage.getRoot());
-    dstStorage.cleanupFolder(true);
+    dstStorage.cleanupFolder();
     dstStorage.writeDB();
 
     log.info("End Backup "+srcStorage.storageName+" "+dstStorage.storageName);

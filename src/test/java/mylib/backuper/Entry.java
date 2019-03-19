@@ -11,7 +11,7 @@ import java.util.stream.Stream;
 
 public class Entry
 {
-  public boolean isSymlink = false;
+  public int type = 0; // 0 : file, 1 : directory, 2 : symlink
   public Path path;
   public String contents;
   public Date lastModified;
@@ -25,6 +25,12 @@ public class Entry
     this.path = Paths.get(path);
   }
 
+  public Entry( String path, int type )
+  {
+    this.path = Paths.get(path);
+    this.type = type;
+  }
+
   public Entry( Path path )
   {
     this.path = path;
@@ -34,7 +40,7 @@ public class Entry
   {
     if ( name.charAt(0) == '@' ) {
       name = name.substring(1,name.length());
-      this.isSymlink = true;
+      this.type = 2;
     }
     this.path = parent.resolve(name).normalize();
   }
@@ -48,8 +54,10 @@ public class Entry
   @Override
   public String toString()
   {
-    return path.toString()+'='+contents+
-      (( lastModified == null ) ? "" : "("+DataBase.STDFORMAT.format(lastModified)+")");
+    String tp = type == 0 ? "" : type == 1 ? "[dir]" : type == 2 ? "[link]" : "[error]";
+    String con = contents == null ? "" : "="+contents;
+    String dt = lastModified == null ? "" : "("+DataBase.STDFORMAT.format(lastModified)+")";
+    return tp+path+con+dt;
   }
 
   @Override
@@ -57,7 +65,7 @@ public class Entry
     if ( obj == null ) return false;
     if ( !(obj instanceof Entry) ) return false;
     Entry ent = (Entry)obj;
-    if ( isSymlink != ent.isSymlink ) return false;
+    if ( type != ent.type ) return false;
     if ( !path.equals(ent.path) ) return false;
     if ( contents == null ) {
       if ( ent.contents != null ) return false;
@@ -120,6 +128,7 @@ public class Entry
 	Stream.of((String[])data[i+1]).forEach(out::println);
 	contents = buf.toString();
       } else if ( data[i+1] instanceof Object[] ) {
+	ent.type = 1;
 	if ( option == 1 ) list.add(ent);
 	walkData(list,ent.path,(Object[])data[i+1],option);
 	if ( option == 2 ) list.add(ent);

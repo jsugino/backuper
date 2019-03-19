@@ -28,6 +28,8 @@ import org.junit.Rule;
 import org.junit.Test;
 import org.junit.rules.TemporaryFolder;
 
+import mylib.backuper.DataBase.Storage;
+
 // Test "ftp" using the following command.
 //	mvn -Dftp=ftp://user:password@host.name/testdir test
 
@@ -70,17 +72,53 @@ public class FtpTest
     */
     createFtpFiles(new Object[]{
 	"a", "aaa",
-	"d", new Object[]{
-	  "d1", "d1d1d1",
+	"d1", new Object[]{
+	  "x1", "xxx1",
+	  "d2", new Object[]{
+	    "x2", "xxx2",
+	    "d3", new Object[]{
+	      "x3", "xxx3",
+	    },
+	    "d4", new Object[]{},
+	  },
 	},
       });
 
     compareFtpFiles(new Object[]{
 	"a", "aaa",
-	"d", new Object[]{
-	  "d1", "d1d1d1",
+	"d1", new Object[]{
+	  "x1", "xxx1",
+	  "d2", new Object[]{
+	    "x2", "xxx2",
+	    "d3", new Object[]{
+	      "x3", "xxx3",
+	    },
+	    "d4", new Object[]{},
+	  },
 	},
       });
+  }
+
+  @Test
+  public void testGetPathHolderList()
+  throws Exception
+  {
+    if ( ftpurl == null ) return;
+    File root = tempdir.getRoot();
+    File dbdir = new File(root,"dic");
+    createFiles(root,new Object[]{
+	"dic", new Object[]{
+	  DataBase.CONFIGNAME, new String[]{
+	    "test.dst="+ftpurl,
+	  },
+	},
+      });
+    DataBase db = new DataBase(dbdir.toPath());
+    Storage sto = db.get("test.dst");
+    sto.scanFolder();
+    System.out.println("-- dump -- start");
+    sto.dump(System.out);
+    System.out.println("-- dump -- end");
   }
 
   // ----------------------------------------------------------------------
@@ -275,7 +313,7 @@ public class FtpTest
     actual = Entry.walkData(data,true);
     assertEquals(4,actual.size());
     assertEquals(new Entry("a","aaa"),actual.get(0));
-    assertEquals(new Entry("d"),actual.get(1));
+    assertEquals(new Entry("d",1),actual.get(1));
     assertEquals(new Entry("d/d1","d1"),actual.get(2));
     assertEquals(new Entry("b","bbb"),actual.get(3));
 
@@ -283,7 +321,7 @@ public class FtpTest
     assertEquals(4,actual.size());
     assertEquals(new Entry("a","aaa"),actual.get(0));
     assertEquals(new Entry("d/d1","d1"),actual.get(1));
-    assertEquals(new Entry("d"),actual.get(2));
+    assertEquals(new Entry("d",1),actual.get(2));
     assertEquals(new Entry("b","bbb"),actual.get(3));
   }
 

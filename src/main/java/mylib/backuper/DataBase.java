@@ -1,5 +1,6 @@
 package mylib.backuper;
 
+import java.io.Closeable;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
@@ -12,20 +13,20 @@ import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.text.ParseException;
 import java.text.SimpleDateFormat;
+import java.util.Arrays;
 import java.util.Base64;
+import java.util.Comparator;
 import java.util.Date;
 import java.util.HashMap;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.ListIterator;
 import java.util.regex.Pattern;
-import java.util.stream.Collectors;
-import java.util.stream.Stream;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-public class DataBase extends HashMap<String,DataBase.Storage>
+public class DataBase extends HashMap<String,DataBase.Storage> implements Closeable
 {
   // ======================================================================
   private final static Logger log = LoggerFactory.getLogger(DataBase.class);
@@ -33,7 +34,7 @@ public class DataBase extends HashMap<String,DataBase.Storage>
   public final static SimpleDateFormat STDFORMAT = new SimpleDateFormat("yyyy/MM/dd HH:mm:ss.SSS");
 
   // ======================================================================
-  public abstract class Storage
+  public abstract class Storage implements Closeable
   {
     public String storageName;
     public LinkedList<Folder> folders = null;		// 全てのフォルダのリスト
@@ -57,7 +58,9 @@ public class DataBase extends HashMap<String,DataBase.Storage>
 
     public abstract List<PathHolder> getPathHolderList( Path path ) throws IOException;
 
-    public abstract boolean deleteRealFile( Path path ) throws IOException;
+    public abstract void deleteRealFile( Path path ) throws IOException;
+
+    public abstract void deleteRealFolder( Path path ) throws IOException;
 
     // --------------------------------------------------
     public Folder getFolder( Path path )
@@ -121,8 +124,15 @@ public class DataBase extends HashMap<String,DataBase.Storage>
       Path dbpath = dbFolder.resolve(storageName+".db");
       log.debug("Write DataBase "+storageName+' '+dbpath);
 
-      try ( PrintStream out = new PrintStream(Files.newOutputStream(dbpath))
-      ) { dump(out); }
+      try ( PrintStream out = new PrintStream(Files.newOutputStream(dbpath)) ) {
+	for ( Folder folder : folders ) {
+	  if ( folder.files.size() == 0 ) continue;
+	  out.println(folder.folderPath.toString());
+	  for ( File file : folder.files ) {
+	    file.dump(out);
+	  }
+	}
+      }
     }
 
     // --------------------------------------------------
@@ -195,30 +205,27 @@ public class DataBase extends HashMap<String,DataBase.Storage>
 
     /**
      * folders から空のフォルダを削除する。
-     *
-     * @param doRemove true の場合、物理的にも削除する。
-     *
      * @throws IOException
      */
-    public void cleanupFolder( boolean doRemove )
+    public void cleanupFolder()
     throws IOException
     {
-      LinkedList<Path> empties = new LinkedList<>();
-      folders = folders.stream()
-	.filter(folder -> {
-	    if ( folder.files.size() != 0 ) return true;
-	    empties.add(folder.folderPath);
-	    return false;
-	  })
-	.collect(Collectors.toCollection(LinkedList::new));
-
-      if ( !doRemove || empties == null ) return;
-
-      for ( Path path : empties.stream()
-	      .sorted((x,y) -> -x.compareTo(y))
-	      .collect(Collectors.toList())
-      ) {
-	if ( deleteRealFile(path) ) log.info("rmdir "+path);
+      HashMap<Path,Integer> map = new HashMap<>();
+      int i = 0;
+      for ( Folder folder : this.folders ) {
+	int n = folder.ignoreCounts + folder.files.size();
+	for ( Path p = folder.folderPath; p != null; p = p.getParent() ) {
+	  map.put(p,map.getOrDefault(p,0)+n);
+	}
+      }
+      for ( ListIterator<Folder> itr = this.folders.listIterator(this.folders.size()); itr.hasPrevious(); ) {
+	Folder folder = itr.previous();
+	Path path = folder.folderPath;
+	if ( map.get(path) == 0 ) {
+	  log.info("rmdir "+path);
+	  deleteRealFolder(path);
+	  itr.remove();
+	}
       }
     }
 
@@ -244,6 +251,7 @@ public class DataBase extends HashMap<String,DataBase.Storage>
 	    for ( Pattern pat : ignoreFolderPats ) {
 	      if ( pat.matcher(relpath.toString()).matches() ) {
 		log.debug("Ignore folder "+relpath);
+		++folder.ignoreCounts;
 		continue nextPath;
 	      }
 	    }
@@ -252,12 +260,14 @@ public class DataBase extends HashMap<String,DataBase.Storage>
 	    File file = (File)holder;
 	    if ( file.type == File.FileType.SYMLINK ) {
 	      log.debug("Ignore symlink "+holder.getPath());
+	      ++folder.ignoreCounts;
 	      continue nextPath;
 	    }
 	    log.trace("scan file "+relpath);
 	    for ( Pattern pat : ignoreFilePats ) {
 	      if ( pat.matcher(relpath.getFileName().toString()).matches() ) {
 		log.debug("Ignore file "+relpath);
+		++folder.ignoreCounts;
 		continue nextPath;
 	      }
 	    }
@@ -285,7 +295,7 @@ public class DataBase extends HashMap<String,DataBase.Storage>
     public void dump( PrintStream out )
     {
       for ( Folder folder : folders ) {
-	out.println(folder.folderPath.toString());
+	out.println(folder.folderPath.toString()+'\t'+folder.ignoreCounts);
 	for ( File file : folder.files ) {
 	  file.dump(out);
 	}
@@ -318,12 +328,14 @@ public class DataBase extends HashMap<String,DataBase.Storage>
   {
     public Path folderPath;
     public LinkedList<File> files = new LinkedList<>();
+    public int ignoreCounts = 0;
 
     public Folder( Path folderPath )
     {
       this.folderPath = folderPath;
     }
 
+    @Override
     public Path getPath()
     {
       return folderPath;
@@ -348,6 +360,15 @@ public class DataBase extends HashMap<String,DataBase.Storage>
       this.filePath = filePath;
     }
 
+    public File( Path filePath, long lastModified, long length )
+    {
+      this.filePath = filePath;
+      this.type = FileType.NORMAL;
+      this.lastModified = lastModified;
+      this.length = length;
+    }
+
+    @Override
     public Path getPath()
     {
       return filePath;
@@ -451,15 +472,7 @@ public class DataBase extends HashMap<String,DataBase.Storage>
 	String key = line.substring(0,idx).trim();
 	String defstr = line.substring(idx+1).trim();
 	if ( defstr.startsWith("ftp://") ) {
-	  int idx0 = "ftp://".length();
-	  int idx1 = defstr.indexOf(':',idx0);
-	  int idx3 = defstr.indexOf('/',idx1);
-	  int idx2 = defstr.lastIndexOf('@',idx3);
-	  String userid   = defstr.substring(idx0,idx1);
-	  String password = defstr.substring(idx1+1,idx2);
-	  String hostname = defstr.substring(idx2+1,idx3);
-	  Path rootFolder = Paths.get(defstr.substring(idx3));
-	  storage = new FtpStorage(this,key,userid,password,hostname,rootFolder);
+	  storage = new FtpStorage(this,key,defstr);
 	} else {
 	  Path path = Paths.get(defstr);
 	  if ( !path.isAbsolute() ) {
@@ -473,6 +486,17 @@ public class DataBase extends HashMap<String,DataBase.Storage>
       }
     } catch ( IOException ex ) {
       log.error(ex.getMessage(),ex);
+    }
+  }
+
+  @Override
+  public void close()
+  throws IOException
+  {
+    try {
+      for ( Storage storage : values() ) storage.close();
+    } finally {
+      clear();
     }
   }
 }

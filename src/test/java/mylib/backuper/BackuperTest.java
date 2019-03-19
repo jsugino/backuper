@@ -3,8 +3,13 @@ package mylib.backuper;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.fail;
 
+import java.io.BufferedReader;
+import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.IOException;
+import java.io.InputStreamReader;
+import java.io.PrintStream;
 import java.nio.file.Files;
 import java.nio.file.NoSuchFileException;
 import java.nio.file.Path;
@@ -12,6 +17,7 @@ import java.nio.file.Paths;
 import java.nio.file.attribute.FileTime;
 import java.text.SimpleDateFormat;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.Date;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -102,6 +108,19 @@ public class BackuperTest
 	      "@lx", "../x",
 	    },
 	  },
+	  "f1", new Object[]{
+	    "f2", new Object[]{
+	      "f3", new Object[]{},
+	    },
+	  },
+	  "g1", new Object[]{
+	    "g2", new Object[]{
+	      "g3", new Object[]{
+		"g", "gggg",
+	      },
+	      "g4", new Object[]{},
+	    },
+	  },
 	},
 	"dst", new Object[]{
 	  "x", "xx",
@@ -115,18 +134,41 @@ public class BackuperTest
 	    "c4", "ccc444", next,
 	  },
 	  "z", new Object[]{
-	    "z1", "",
+	    "za", "za",
+	    "z1", new Object[]{
+	      "zb", "zbzb",
+	      "z2", new Object[]{
+		"zc", "zczc",
+	      },
+	    },
 	  },
 	},
       });
 
-    //System.out.println("--- ORIG ---");
-    //printFolders(root);
+    DataBase db = execute(root,dbdir);
 
-    execute(root,dbdir);
-
-    //System.out.println("--- ANSWER ---");
-    //printFolders(tempdir.getRoot());
+    ByteArrayOutputStream bout = new ByteArrayOutputStream();
+    PrintStream out = new PrintStream(bout);
+    db.get("test.src").dump(out);
+    out.close();
+    checkContents(bout.toByteArray(),new String[]{
+	".	3",
+	"*	3	b",
+	"c	1",
+	"*	6	c2",
+	"*	6	c3",
+	"*	6	c4",
+	"c/d	3",
+	"*	3	d",
+	"f1	0",
+	"f1/f2	0",
+	"f1/f2/f3	0",
+	"g1	0",
+	"g1/g2	0",
+	"g1/g2/g3	0",
+	"*	4	g",
+	"g1/g2/g4	0",
+      });
 
     checkContents(new File(dbdir,"test.src.db"),new String[]{
 	".",
@@ -137,6 +179,8 @@ public class BackuperTest
 	"vopwnoEeXpfV3zpnf9hM4A	*	6	c4",
 	"c/d",
 	"d5Y7epMTd61Kta1qnNcYqg	*	3	d",
+	"g1/g2/g3",
+	"weu0kz4GzlYXSD9mXiZifA	*	4	g",
       });
     checkContents(new File(dbdir,"test.dst.db"),new String[]{
 	".",
@@ -147,6 +191,40 @@ public class BackuperTest
 	"vopwnoEeXpfV3zpnf9hM4A	*	6	c4",
 	"c/d",
 	"d5Y7epMTd61Kta1qnNcYqg	*	3	d",
+	"g1/g2/g3",
+	"weu0kz4GzlYXSD9mXiZifA	*	4	g",
+      });
+
+    compareFiles(srcdir,new Object[]{
+	"a", "aa",
+	"b", "bbb",
+	"@l", "b",
+	"@lc", "c",
+	"c", new Object[]{
+	  "c1", "ccc111",
+	  "c2", "ccc222",
+	  "c3", "ccc333", current,
+	  "c4", "ccc444", current,
+	  "d", new Object[]{
+	    "d", "ddd",
+	    "@lc", "../../c",
+	    "@lc1", "../c1",
+	    "@lx", "../x",
+	  },
+	},
+	"f1", new Object[]{
+	  "f2", new Object[]{
+	    "f3", new Object[]{},
+	  },
+	},
+	"g1", new Object[]{
+	  "g2", new Object[]{
+	    "g3", new Object[]{
+	      "g", "gggg",
+	    },
+	    "g4", new Object[]{},
+	  },
+	},
       });
 
     compareFiles(dstdir,new Object[]{
@@ -157,6 +235,22 @@ public class BackuperTest
 	  "c4", "ccc444", lastModified(root,"src/c/c4"),
 	  "d", new Object[] {
 	    "d", "ddd", lastModified(root,"src/c/d/d"),
+	  },
+	  // 空のディレクトリは作成されない。
+	  /*
+	  "f1", new Object[]{
+	    "f2", new Object[]{
+	      "f3", new Object[]{
+	      },
+	    },
+	  },
+	  */
+	},
+	"g1", new Object[]{
+	  "g2", new Object[]{
+	    "g3", new Object[]{
+	      "g", "gggg",
+	    },
 	  },
 	},
 	"x", "xx",
@@ -180,6 +274,7 @@ public class BackuperTest
 	  "calculate MD5 c/c3",
 	  "calculate MD5 c/c4",
 	  "calculate MD5 c/d/d",
+	  "calculate MD5 g1/g2/g3/g",
 	  "Ignore symlink c/d/lc",
 	  "Ignore symlink c/d/lc1",
 	  "Ignore symlink c/d/lx",
@@ -195,18 +290,26 @@ public class BackuperTest
 	  "calculate MD5 c/c2",
 	  "calculate MD5 c/c3",
 	  "calculate MD5 c/c4",
-	  "calculate MD5 z/z1",
+	  "calculate MD5 z/za",
+	  "calculate MD5 z/z1/zb",
+	  "calculate MD5 z/z1/z2/zc",
 	},
 	"Write DataBase test.dst "+dbdir+"/test.dst.db",
 	"Compare Files test.src test.dst", new String[]{
 	  "copy b",
+	  "copy g1/g2/g3/g",
 	  "copy override c/c2",
 	  "set lastModified c/c4",
 	  "copy c/d/d",
 	  "mkdir c/d",
+	  "mkdir g1/g2/g3",
 	  "delete y/y2",
 	  "rmdir z",
-	  "delete z/z1",
+	  "rmdir z/z1",
+	  "rmdir z/z1/z2",
+	  "delete z/za",
+	  "delete z/z1/zb",
+	  "delete z/z1/z2/zc",
 	},
 	"Write DataBase test.dst "+dbdir+"/test.dst.db",
 	"End Backup test.src test.dst",
@@ -289,13 +392,14 @@ public class BackuperTest
   // ----------------------------------------------------------------------
   // ユーティリティメソッド
 
-  public static void execute( File root, File dbdir )
+  public static DataBase execute( File root, File dbdir )
   throws IOException
   {
     DataBase db = new DataBase(dbdir.toPath());
     DataBase.Storage srcStorage = db.get("test.src");
     DataBase.Storage dstStorage = db.get("test.dst");
     Backuper.backup(srcStorage,dstStorage);
+    return db;
   }
 
   // ログの取得
@@ -377,7 +481,7 @@ public class BackuperTest
       File target = new File(dir,ent.path.toString());
       if ( ent.contents == null ) {
 	target.mkdir();
-      } else if ( ent.isSymlink ) {
+      } else if ( ent.type == 2 ) {
 	Files.createSymbolicLink(target.getAbsoluteFile().toPath(),Paths.get(ent.contents));
       } else {
 	Files.write(target.toPath(),ent.contents.getBytes());
@@ -391,7 +495,7 @@ public class BackuperTest
   throws IOException
   {
     Map<Path,Entry> actual = collectFiles(dir);
-    List<Entry> expect = Entry.walkData(data);
+    List<Entry> expect = Entry.walkData(data,true);
 
     expect = expect.stream()
       .filter(exp->{
@@ -401,7 +505,7 @@ public class BackuperTest
 	  return false;})
       .collect(Collectors.toList());
     if ( expect.size() > 0 || actual.size() > 0 )
-      fail(String.format("different files : expect = %s, actual = %s ",expect,actual));
+      fail(String.format("different files : expect = %s, actual = %s ",expect,actual.values()));
   }
 
   // ファイルを収集
@@ -411,13 +515,19 @@ public class BackuperTest
     Path root = dir.toPath();
     HashMap<Path,Entry> actual = new HashMap<>();
     try ( Stream<Path> stream = Files.walk(root) ) {
-      stream
-	.filter(p->!Files.isDirectory(p))
-	.map(root::relativize)
-	.map(Entry::new)
-	.forEach(ent->actual.put(ent.path,ent));
+      for ( Path path : stream.collect(Collectors.toList() ) ) {
+	if ( root.relativize(path).toString().length() == 0 ) continue;
+	Entry ent = new Entry(root.relativize(path));
+	if ( Files.isDirectory(path) ) ent.type = 1;
+	if ( Files.isSymbolicLink(path) ) {
+	  ent.type = 2;
+	  ent.contents = Files.readSymbolicLink(path).toString();
+	}
+	actual.put(ent.path,ent);
+      }
     }
     for ( Entry ent : actual.values() ) {
+      if ( ent.type != 0 ) continue;
       ent.contents = new String(Files.readAllBytes(root.resolve(ent.path)));
       ent.lastModified = lastModified(new File(dir,ent.path.toString()));
     }
@@ -428,13 +538,28 @@ public class BackuperTest
   public static void checkContents( File file, String expects[] )
   throws IOException
   {
+    checkContents(Files.readAllLines(file.toPath()),expects);
+  }
+
+  public static void checkContents( byte buf[], String expects[] )
+  throws IOException
+  {
+    BufferedReader in = new BufferedReader(new InputStreamReader(new ByteArrayInputStream(buf)));
+    LinkedList<String> lines = new LinkedList<>();
+    String line;
+    while ( (line = in.readLine()) != null ) lines.add(line);
+    in.close();
+    checkContents(lines,expects);
+  }
+
+  public static void checkContents( List<String> actual, String expects[] )
+  {
     int i = 0;
-    List<String> actual = Files.readAllLines(file.toPath());
     for ( String line : actual ) {
       if ( i >= expects.length ) break;
       int idx = expects[i].indexOf('*');
       String msg = String.format("line %d",i+1);
-      if ( idx > 0 ) {
+      if ( idx >= 0 ) {
 	int dif = line.length()-expects[i].length();
 	line = line.substring(0,idx)+'*'+line.substring(idx+1+dif,line.length());
       }
@@ -513,5 +638,70 @@ public class BackuperTest
       System.out.println("event : "+event);
     }
     System.out.println("-- log event (end) --");
+  }
+
+  // ----------------------------------------------------------------------
+  // 以下は、調査のためのテスト
+
+  // Path の比較 compareTo() の挙動の調査
+  // 各パスを手繰りながら比較するのではなく、単に全体を文字列として比較している。
+  @Test
+  public void testPath()
+  {
+    System.out.println("Path.class="+Paths.get(".").getClass().getName());
+    check("aa","aaa");
+    check("aa","ab");
+    check("a/b","a/c");
+    check("a/b","a=b");
+    check("a/b","a+b");
+
+    String data[] = new String[]{ "a", "aa", "aaa", "ab", "a/b", "a/c", "a=b", "a+b"};
+    Path paths[] = new Path[data.length];
+    for ( int i = 0; i < data.length; ++i ) paths[i] = Paths.get(data[i]);
+    Arrays.sort(data);
+    Arrays.sort(paths);
+    System.out.println("data="+Arrays.asList(data));
+    System.out.println("paths="+Arrays.asList(paths));
+
+    check("a/b/c");
+    check("/a/b/c");
+  }
+
+  public void check( String a, String b ) 
+  {
+    Path pa = Paths.get(a);
+    Path pb = Paths.get(b);
+    System.out.println(a+cmp(pa,pb)+b);
+    a = cvt(pa = pa.getParent());
+    b = cvt(pb = pb.getParent());
+    System.out.println(a+cmp(pa,pb)+b);
+  }
+
+  public String cvt( Path p )
+  {
+    return ( p == null ) ? "(null)" : p.toString();
+  }
+
+  public char cmp( Path pa, Path pb )
+  {
+    if ( pa == null || pb == null ) return '?';
+    int c = pa.compareTo(pb);
+    return
+      c == 0 ? '=' :
+      c <  0 ? '<' :
+      '>';
+  }
+
+  public void check( String s )
+  {
+    Path p = Paths.get(s);
+    int len = p.getNameCount();
+    String sep = "";
+    System.out.print(s+" = ");
+    for ( int i = 0; i < len; ++i ) {
+      System.out.print(sep+p.getName(i));
+      sep = " / ";
+    }
+    System.out.println();
   }
 }

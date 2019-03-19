@@ -27,6 +27,13 @@ public class LocalStorage extends Storage
     this.rootFolder = rootFolder;
   }
 
+  @Override
+  public void close()
+  throws IOException
+  {
+    // nothing to do
+  }
+
   public String getRoot()
   {
     return rootFolder.toString();
@@ -109,16 +116,20 @@ public class LocalStorage extends Storage
     return list;
   }
 
-  public boolean deleteRealFile( Path path )
+  public void deleteRealFolder( Path path )
   throws IOException
   {
     Path full = rootFolder.resolve(path);
-    if (
-      Files.isDirectory(full) &&
-      Files.list(full).count() != 0
-    ) return false;
+    if ( !Files.isDirectory(full) ) throw new IOException("Is not a directory : "+full);
     Files.delete(full);
-    return true;
+  }
+
+  public void deleteRealFile( Path path )
+  throws IOException
+  {
+    Path full = rootFolder.resolve(path);
+    if ( Files.isDirectory(full) ) throw new IOException("Is not a file : "+full);
+    Files.delete(full);
   }
 
   public boolean isSymbolicLink( Path relpath )
