@@ -15,9 +15,11 @@ import java.nio.file.NoSuchFileException;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.nio.file.attribute.FileTime;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.text.SimpleDateFormat;
 import java.util.Arrays;
-import java.util.Collections;
+import java.util.Base64;
 import java.util.Date;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -25,7 +27,9 @@ import java.util.Iterator;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
+import java.util.function.Consumer;
 import java.util.stream.Collectors;
+import java.util.stream.IntStream;
 import java.util.stream.Stream;
 
 import org.junit.Before;
@@ -48,17 +52,20 @@ public class BackuperTest
 
   public static ListAppender<ILoggingEvent> event = new ListAppender<>();
 
+  public final static String APPENDERNAME = "FORTEST";
+
   @BeforeClass
   // ログの内容をチェックするための準備
   public static void initLogger()
   {
     ch.qos.logback.classic.Logger log = (ch.qos.logback.classic.Logger)LoggerFactory.getLogger("root");
-    //printAppender(log);
-    event.setName("FORTEST");
-    event.setContext(log.getLoggerContext());
-    event.start();
-    log.addAppender(event);
-    //printAppender(log);
+    if ( log.getAppender(APPENDERNAME) == null ) {
+      System.out.println("add appenter : "+APPENDERNAME);
+      event.setName(APPENDERNAME);
+      event.setContext(log.getLoggerContext());
+      event.start();
+      log.addAppender(event);
+    }
   }
 
   @Before
@@ -147,11 +154,7 @@ public class BackuperTest
 
     DataBase db = execute(root,dbdir);
 
-    ByteArrayOutputStream bout = new ByteArrayOutputStream();
-    PrintStream out = new PrintStream(bout);
-    db.get("test.src").dump(out);
-    out.close();
-    checkContents(bout.toByteArray(),new String[]{
+    checkContents(db.get("test.src")::dump,new String[]{
 	".	3",
 	"*	3	b",
 	"c	1",
@@ -172,27 +175,27 @@ public class BackuperTest
 
     checkContents(new File(dbdir,"test.src.db"),new String[]{
 	".",
-	"CPjgJgxkQYUQzvsrBu7lzQ	*	3	b",
+	line(srcdir,"b","bbb"),
 	"c",
-	"puUcVpdndkyHnkmklAcKHA	*	6	c2",
-	"nZySmjxYljiQjpaNIMXGZg	*	6	c3",
-	"vopwnoEeXpfV3zpnf9hM4A	*	6	c4",
+	line(srcdir,"c/c2","ccc222"),
+	line(current,"c/c3","ccc333"),
+	line(current,"c/c4","ccc444"),
 	"c/d",
-	"d5Y7epMTd61Kta1qnNcYqg	*	3	d",
+	line(srcdir,"c/d/d","ddd"),
 	"g1/g2/g3",
-	"weu0kz4GzlYXSD9mXiZifA	*	4	g",
+	line(srcdir,"g1/g2/g3/g","gggg"),
       });
     checkContents(new File(dbdir,"test.dst.db"),new String[]{
 	".",
-	"CPjgJgxkQYUQzvsrBu7lzQ	*	3	b",
+	line(dstdir,"b","bbb"),
 	"c",
-	"puUcVpdndkyHnkmklAcKHA	*	6	c2",
-	"nZySmjxYljiQjpaNIMXGZg	*	6	c3",
-	"vopwnoEeXpfV3zpnf9hM4A	*	6	c4",
+	line(dstdir,"c/c2","ccc222"),
+	line(current,"c/c3","ccc333"),
+	line(current,"c/c4","ccc444"),
 	"c/d",
-	"d5Y7epMTd61Kta1qnNcYqg	*	3	d",
+	line(dstdir,"c/d/d","ddd"),
 	"g1/g2/g3",
-	"weu0kz4GzlYXSD9mXiZifA	*	4	g",
+	line(dstdir,"g1/g2/g3/g","gggg"),
       });
 
     compareFiles(srcdir,new Object[]{
@@ -302,6 +305,8 @@ public class BackuperTest
 	  "set lastModified c/c4",
 	  "copy c/d/d",
 	  "mkdir c/d",
+	  "mkdir g1",
+	  "mkdir g1/g2",
 	  "mkdir g1/g2/g3",
 	  "delete y/y2",
 	  "rmdir z",
@@ -395,11 +400,12 @@ public class BackuperTest
   public static DataBase execute( File root, File dbdir )
   throws IOException
   {
-    DataBase db = new DataBase(dbdir.toPath());
-    DataBase.Storage srcStorage = db.get("test.src");
-    DataBase.Storage dstStorage = db.get("test.dst");
-    Backuper.backup(srcStorage,dstStorage);
-    return db;
+    try ( DataBase db = new DataBase(dbdir.toPath()) ) {
+      DataBase.Storage srcStorage = db.get("test.src");
+      DataBase.Storage dstStorage = db.get("test.dst");
+      Backuper.backup(srcStorage,dstStorage);
+      return db;
+    }
   }
 
   // ログの取得
@@ -541,6 +547,16 @@ public class BackuperTest
     checkContents(Files.readAllLines(file.toPath()),expects);
   }
 
+  public static void checkContents( Consumer<PrintStream> func, String expects[] )
+  throws IOException
+  {
+    ByteArrayOutputStream bout = new ByteArrayOutputStream();
+    PrintStream out = new PrintStream(bout);
+    func.accept(out);
+    out.close();
+    checkContents(bout.toByteArray(),expects);
+  }
+
   public static void checkContents( byte buf[], String expects[] )
   throws IOException
   {
@@ -566,8 +582,63 @@ public class BackuperTest
       assertEquals(msg,expects[i],line);
       ++i;
     }
-    if ( i < actual.size() ) fail(String.format("more actual %d lines ",actual.size()-i));
-    if ( i < expects.length ) fail(String.format("less actual %d lines ",expects.length-i));
+    List<String> act = actual.subList(i,actual.size());
+    if ( act.size() > 0 ) fail(printToString(out->{
+	  out.format("more actual %d lines. missing expects are...",act.size()).println();
+	  act.stream().forEach(out::println);
+	}));
+    final int n = i;
+    if ( i < expects.length ) fail(printToString(out->{
+	  out.format("less actual %d lines. remaining expects are...",expects.length-n).println();
+	  for ( int j = n; j < expects.length; ++j ) out.println(expects[j]);
+	}));
+  }
+
+  public static MessageDigest digest;
+
+  @BeforeClass
+  public static void initMD5()
+  throws NoSuchAlgorithmException
+  {
+    digest = MessageDigest.getInstance("MD5");
+  }
+
+  public static String MD5( String contents )
+  {
+    digest.reset();
+    digest.update(contents.getBytes());
+    String str = Base64.getEncoder().encodeToString(digest.digest());
+    int idx = str.indexOf('=');
+    if ( idx > 0 ) str = str.substring(0,idx);
+    return str;
+  }
+
+  public static String date( File dir, String filename )
+  throws IOException
+  {
+    return date(lastModified(dir,filename));
+  }
+
+  public static String date( Date time )
+  throws IOException
+  {
+    return FORM.format(time);
+  }
+
+  public static String line( File dir, String path, String contents )
+  throws IOException
+  {
+    int idx = path.lastIndexOf('/');
+    String name = idx < 0 ? path : path.substring(idx+1);
+    return MD5(contents)+'\t'+date(dir,path)+'\t'+contents.length()+'\t'+name;
+  }
+
+  public static String line( Date time, String path, String contents )
+  throws IOException
+  {
+    int idx = path.lastIndexOf('/');
+    String name = idx < 0 ? path : path.substring(idx+1);
+    return MD5(contents)+'\t'+date(time)+'\t'+contents.length()+'\t'+name;
   }
 
   // ----------------------------------------------------------------------
@@ -638,6 +709,15 @@ public class BackuperTest
       System.out.println("event : "+event);
     }
     System.out.println("-- log event (end) --");
+  }
+
+  public static String printToString( Consumer<PrintStream> func )
+  {
+    ByteArrayOutputStream bout = new ByteArrayOutputStream();
+    PrintStream out = new PrintStream(bout);
+    func.accept(out);
+    out.close();
+    return new String(bout.toByteArray());
   }
 
   // ----------------------------------------------------------------------

@@ -34,62 +34,46 @@ public class LocalStorage extends Storage
     // nothing to do
   }
 
+  @Override
+  public long timeUnit() {
+    return 1L;
+  }
+
+  @Override
   public String getRoot()
   {
     return rootFolder.toString();
   }
 
-  public boolean mkParentDir( Path path )
+  @Override
+  public void makeDirectory( Path path )
   throws IOException
   {
-    Path parent = rootFolder.resolve(path).getParent();
-    if ( !Files.isDirectory(parent) ) {
-      Files.createDirectories(parent);
-      return true;
-    }
-    return false;
+    Files.createDirectory(rootFolder.resolve(path));
   }
 
+  @Override
   public InputStream newInputStream( Path path )
   throws IOException
   {
     return Files.newInputStream(rootFolder.resolve(path));
   }
 
+  @Override
   public OutputStream newOutputStream( Path path )
   throws IOException
   {
     return Files.newOutputStream(rootFolder.resolve(path));
   }
 
+  @Override
   public void setLastModified( Path path, long time )
   throws IOException
   {
     Files.setLastModifiedTime(rootFolder.resolve(path),FileTime.fromMillis(time));
   }
 
-  public long getLastModified( Path path )
-  throws IOException
-  {
-    return Files.getLastModifiedTime(rootFolder.resolve(path)).toMillis();
-  }
-
-  public long getSize( Path relpath )
-  throws IOException
-  {
-    return Files.size(rootFolder.resolve(relpath));
-  }
-
-  public List<Path> pathList( Path rel )
-  throws IOException
-  {
-    try ( Stream<Path> stream =
-      Files.list(rel.equals(Paths.get(".")) ? rootFolder : rootFolder.resolve(rel))
-    ) {
-      return stream.map(rootFolder::relativize).collect(Collectors.toList());
-    }
-  }
-
+  @Override
   public List<PathHolder> getPathHolderList( Path rel )
   throws IOException
   {
@@ -116,6 +100,7 @@ public class LocalStorage extends Storage
     return list;
   }
 
+  @Override
   public void deleteRealFolder( Path path )
   throws IOException
   {
@@ -124,6 +109,7 @@ public class LocalStorage extends Storage
     Files.delete(full);
   }
 
+  @Override
   public void deleteRealFile( Path path )
   throws IOException
   {
@@ -132,6 +118,7 @@ public class LocalStorage extends Storage
     Files.delete(full);
   }
 
+  /*
   public boolean isSymbolicLink( Path relpath )
   {
     return Files.isSymbolicLink(rootFolder.resolve(relpath));
@@ -141,6 +128,7 @@ public class LocalStorage extends Storage
   {
     return Files.isDirectory(rootFolder.resolve(relpath));
   }
+  */
 
   @Override
   public String toString()

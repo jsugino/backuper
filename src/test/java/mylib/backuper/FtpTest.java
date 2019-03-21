@@ -1,9 +1,17 @@
 package mylib.backuper;
 
+import static mylib.backuper.BackuperTest.FORM;
+import static mylib.backuper.BackuperTest.checkContents;
+import static mylib.backuper.BackuperTest.checkEvent;
+import static mylib.backuper.BackuperTest.compareFiles;
 import static mylib.backuper.BackuperTest.createFiles;
+import static mylib.backuper.BackuperTest.event;
+import static mylib.backuper.BackuperTest.execute;
+import static mylib.backuper.BackuperTest.lastModified;
+import static mylib.backuper.BackuperTest.line;
+import static mylib.backuper.FtpStorage.FTPTIMEFORM;
 
 import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
 import java.io.ByteArrayInputStream;
@@ -12,6 +20,7 @@ import java.io.File;
 import java.io.IOException;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.util.Arrays;
 import java.util.Date;
 import java.util.HashMap;
 import java.util.LinkedList;
@@ -19,10 +28,9 @@ import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
 
-import org.apache.commons.net.ftp.FTPClient;
 import org.apache.commons.net.ftp.FTPFile;
 import org.apache.commons.net.ftp.FTPReply;
-import org.junit.After;
+import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.Rule;
 import org.junit.Test;
@@ -38,6 +46,9 @@ public class FtpTest
   @Rule
   public TemporaryFolder tempdir = new TemporaryFolder(new File("target"));
 
+  @BeforeClass public static void initLogger() { BackuperTest.initLogger(); }
+  @Before public void initEvent() { event.list.clear(); }
+
   // ----------------------------------------------------------------------
   // テストプログラム
 
@@ -45,61 +56,487 @@ public class FtpTest
   public void testSimple()
   throws Exception
   {
-    if ( !initFTPClient() ) return;
+    if ( ftpurl == null ) return;
     File root = tempdir.getRoot();
     File dbdir = new File(root,"dic");
     File srcdir = new File(root,"src");
+    long current = System.currentTimeMillis();
+    Date current1 = new Date(current-10123L);
+    Date current2 = new Date(current-20456L);
+    Date current3 = new Date(current-30789L);
+
     createFiles(root,new Object[]{
 	"dic", new Object[]{
 	  DataBase.CONFIGNAME, new String[]{
 	    "test.src="+srcdir.getAbsolutePath(),
+	    "a",
+	    "c1",
 	    "test.dst="+ftpurl,
+	    "x",
+	    "y1",
 	  },
 	},
 	"src", new Object[]{
-	  "a", "aaa",
-	  "b", "bbbbb",
-	},
-      });
-
-    //execute(root,dbdir);
-
-    /*
-    compareFtpFiles(new Object[]{
-	"a", "aaa",
-	"b", "bbbbb",
-      });
-    */
-    createFtpFiles(new Object[]{
-	"a", "aaa",
-	"d1", new Object[]{
-	  "x1", "xxx1",
-	  "d2", new Object[]{
-	    "x2", "xxx2",
-	    "d3", new Object[]{
-	      "x3", "xxx3",
+	  "a", "aa", current1,
+	  "b", "bbb", current2,
+	  "@l", "b",
+	  "@lc", "c",
+	  "c", new Object[]{
+	    "c1", "ccc111", current3,
+	    "c2", "ccc222", current1,
+	    "c3", "ccc333", current2,
+	    "c4", "ccc444", current3,
+	    "d", new Object[]{
+	      "d", "ddd", current1,
+	      "@lc", "../../c",
+	      "@lc1", "../c1",
+	      "@lx", "../x",
 	    },
-	    "d4", new Object[]{},
+	  },
+	  "f1", new Object[]{
+	    "f2", new Object[]{
+	      "f3", new Object[]{},
+	    },
+	  },
+	  "g1", new Object[]{
+	    "g2", new Object[]{
+	      "g3", new Object[]{
+		"g", "gggg", current2,
+	      },
+	      "g4", new Object[]{},
+	    },
 	  },
 	},
       });
 
-    compareFtpFiles(new Object[]{
-	"a", "aaa",
-	"d1", new Object[]{
-	  "x1", "xxx1",
-	  "d2", new Object[]{
-	    "x2", "xxx2",
-	    "d3", new Object[]{
-	      "x3", "xxx3",
-	    },
-	    "d4", new Object[]{},
+    try ( FTPClient ftpclient = initFTPClient() ) {
+      createFtpFiles(ftpclient,new Object[]{
+	  "x", "xx",
+	  "y", new Object[]{
+	    "y1", "y1data", current1,
+	    "y2", "y2data", current2,
 	  },
+	  "c", new Object[]{
+	    "c2", "ccc", current1,
+	    "c3", "ccc333", current2,
+	    "c4", "ccc444", current2,
+	  },
+	  "z", new Object[]{
+	    "za", "za", current1,
+	    "z1", new Object[]{
+	      "zb", "zbzb", current2,
+	      "z2", new Object[]{
+		"zc", "zczc", current3,
+	      },
+	    },
+	  },
+	});
+    }
+
+    DataBase db = execute(root,dbdir);
+
+    checkContents(db.get("test.src")::dump,new String[]{
+	".	3",
+	line(current2,"b","bbb"),
+	"c	1",
+	line(current1,"c/c2","ccc222"),
+	line(current2,"c/c3","ccc333"),
+	line(current3,"c/c4","ccc444"),
+	"c/d	3",
+	line(current1,"c/d/d","ddd"),
+	"f1	0",
+	"f1/f2	0",
+	"f1/f2/f3	0",
+	"g1	0",
+	"g1/g2	0",
+	"g1/g2/g3	0",
+	line(current2,"g1/g2/g3/g","gggg"),
+	"g1/g2/g4	0",
+      });
+    checkContents(db.get("test.dst")::dump,new String[]{
+	".	1",
+	line(zero(current2),"b","bbb"),
+	"c	0",
+	line(zero(current1),"c/c2","ccc222"),
+	line(zero(current2),"c/c3","ccc333"),
+	line(zero(current3),"c/c4","ccc444"),
+	"c/d	0",
+	line(zero(current1),"c/d/d","ddd"),
+	"g1	0",
+	"g1/g2	0",
+	"g1/g2/g3	0",
+	line(zero(current2),"g1/g2/g3/g","gggg"),
+	"y	1",
+      });
+
+    try ( FTPClient ftpclient = initFTPClient() ) {
+      compareFtpFiles(ftpclient,new Object[]{
+	  "b", "bbb", zero(current2),
+	  "c", new Object[]{
+	    "c2", "ccc222", zero(current1),
+	    "c3", "ccc333", zero(current2),
+	    "c4", "ccc444", zero(current3),
+	    "d", new Object[] {
+	      "d", "ddd", zero(current1),
+	    },
+	    // 空のディレクトリは作成されない。
+	    /*
+	      "f1", new Object[]{
+	      "f2", new Object[]{
+	      "f3", new Object[]{
+	      },
+	      },
+	      },
+	    */
+	  },
+	  "g1", new Object[]{
+	    "g2", new Object[]{
+	      "g3", new Object[]{
+		"g", "gggg", zero(current2),
+	      },
+	    },
+	  },
+	  "x", "xx",
+	  "y", new Object[]{
+	    "y1", "y1data",
+	  },
+	});
+    }
+
+    checkContents(new File(dbdir,"test.src.db"),new String[]{
+	".",
+	"CPjgJgxkQYUQzvsrBu7lzQ	*	3	b",
+	"c",
+	"puUcVpdndkyHnkmklAcKHA	*	6	c2",
+	"nZySmjxYljiQjpaNIMXGZg	*	6	c3",
+	"vopwnoEeXpfV3zpnf9hM4A	*	6	c4",
+	"c/d",
+	"d5Y7epMTd61Kta1qnNcYqg	*	3	d",
+	"g1/g2/g3",
+	"weu0kz4GzlYXSD9mXiZifA	*	4	g",
+      });
+    checkContents(new File(dbdir,"test.dst.db"),new String[]{
+	".",
+	"CPjgJgxkQYUQzvsrBu7lzQ	*	3	b",
+	"c",
+	"puUcVpdndkyHnkmklAcKHA	*	6	c2",
+	"nZySmjxYljiQjpaNIMXGZg	*	6	c3",
+	"vopwnoEeXpfV3zpnf9hM4A	*	6	c4",
+	"c/d",
+	"d5Y7epMTd61Kta1qnNcYqg	*	3	d",
+	"g1/g2/g3",
+	"weu0kz4GzlYXSD9mXiZifA	*	4	g",
+      });
+
+    int idx = ftpurl.lastIndexOf('@');
+    String ftpstr = "ftp://"+ftpurl.substring(idx+1);
+    System.out.println("ftpstr = "+ftpstr);
+    checkEvent(new Object[]{
+	"Start Backup test.src test.dst",
+	"Read DataBase test.src "+dbdir+"/test.src.db", new String[]{
+	  "java.nio.file.NoSuchFileException: "+dbdir+"/test.src.db",
 	},
+	"Scan Folder test.src "+srcdir.getAbsolutePath(), new String[]{
+	  "Ignore file a",
+	  "calculate MD5 b",
+	  "Ignore symlink l",
+	  "Ignore symlink lc",
+	  "Ignore file c/c1",
+	  "calculate MD5 c/c2",
+	  "calculate MD5 c/c3",
+	  "calculate MD5 c/c4",
+	  "calculate MD5 c/d/d",
+	  "calculate MD5 g1/g2/g3/g",
+	  "Ignore symlink c/d/lc",
+	  "Ignore symlink c/d/lc1",
+	  "Ignore symlink c/d/lx",
+	},
+	"Write DataBase test.src "+dbdir+"/test.src.db",
+	"Read DataBase test.dst "+dbdir+"/test.dst.db", new String[]{
+	  "java.nio.file.NoSuchFileException: "+dbdir+"/test.dst.db",
+	},
+	"Scan Folder test.dst "+ftpstr, new String[]{
+	  "Ignore file x",
+	  "Ignore file y/y1",
+	  "calculate MD5 y/y2",
+	  "calculate MD5 c/c2",
+	  "calculate MD5 c/c3",
+	  "calculate MD5 c/c4",
+	  "calculate MD5 z/za",
+	  "calculate MD5 z/z1/zb",
+	  "calculate MD5 z/z1/z2/zc",
+	},
+	"Write DataBase test.dst "+dbdir+"/test.dst.db",
+	"Compare Files test.src test.dst", new String[]{
+	  "copy b",
+	  "copy g1/g2/g3/g",
+	  "copy override c/c2",
+	  "set lastModified c/c4",
+	  "copy c/d/d",
+	  "mkdir c/d",
+	  "mkdir g1",
+	  "mkdir g1/g2",
+	  "mkdir g1/g2/g3",
+	  "delete y/y2",
+	  "rmdir z",
+	  "rmdir z/z1",
+	  "rmdir z/z1/z2",
+	  "delete z/za",
+	  "delete z/z1/zb",
+	  "delete z/z1/z2/zc",
+	},
+	"Write DataBase test.dst "+dbdir+"/test.dst.db",
+	"End Backup test.src test.dst",
       });
   }
 
   @Test
+  public void testReverse()
+  throws Exception
+  {
+    if ( ftpurl == null ) return;
+    File root = tempdir.getRoot();
+    File dbdir = new File(root,"dic");
+    File dstdir = new File(root,"dst");
+    long current = System.currentTimeMillis()/1000L*1000L;
+    Date current1 = new Date(current-10000L);
+    Date current2 = new Date(current-20000L);
+    Date current3 = new Date(current-30000L);
+
+    createFiles(root,new Object[]{
+	"dic", new Object[]{
+	  DataBase.CONFIGNAME, new String[]{
+	    "test.src="+ftpurl,
+	    "a",
+	    "c1",
+	    "test.dst="+dstdir.getAbsolutePath(),
+	    "x",
+	    "y1",
+	  },
+	},
+	"dst", new Object[]{
+	  "x", "xx",
+	  "@l", "x",
+	  "@lc", "y",
+	  "y", new Object[]{
+	    "y1", "y1data", current1,
+	    "y2", "y2data", current2,
+	  },
+	  "c", new Object[]{
+	    "c2", "ccc", current1,
+	    "c3", "ccc333", current2,
+	    "c4", "ccc444", current2,
+	  },
+	  "z", new Object[]{
+	    "za", "za",  current1,
+	    "z1", new Object[]{
+	      "@lc", "../../z",
+	      "@lc1", "../za",
+	      "@lx", "../z1",
+	      "zb", "zbzb", current2,
+	      "z2", new Object[]{
+		"zc", "zczc", current3,
+	      },
+	    },
+	  },
+	},
+      });
+
+    try ( FTPClient ftpclient = initFTPClient() ) {
+      createFtpFiles(ftpclient,new Object[]{
+	  "a", "aa", current1,
+	  "b", "bbb", current2,
+	  "c", new Object[]{
+	    "c1", "ccc111", current3,
+	    "c2", "ccc222", current1,
+	    "c3", "ccc333", current2,
+	    "c4", "ccc444", current3,
+	    "d", new Object[]{
+	      "d", "ddd", current1,
+	    },
+	  },
+	  "f1", new Object[]{
+	    "f2", new Object[]{
+	      "f3", new Object[]{},
+	    },
+	  },
+	  "g1", new Object[]{
+	    "g2", new Object[]{
+	      "g3", new Object[]{
+		"g", "gggg", current2,
+	      },
+	      "g4", new Object[]{},
+	    },
+	  },
+	});
+    }
+
+    DataBase db = execute(root,dbdir);
+
+    checkContents(db.get("test.src")::dump,new String[]{
+	".	1",
+	line(current2,"b","bbb"),
+	"c	1",
+	line(current1,"c/c2","ccc222"),
+	line(current2,"c/c3","ccc333"),
+	line(current3,"c/c4","ccc444"),
+	"c/d	0",
+	line(current1,"c/d/d","ddd"),
+	"f1	0",
+	"f1/f2	0",
+	"f1/f2/f3	0",
+	"g1	0",
+	"g1/g2	0",
+	"g1/g2/g3	0",
+	line(current2,"g1/g2/g3/g","gggg"),
+	"g1/g2/g4	0",
+      });
+    checkContents(db.get("test.dst")::dump,new String[]{
+	".	3",
+	line(current2,"b","bbb"),
+	"c	0",
+	line(current1,"c/c2","ccc222"),
+	line(current2,"c/c3","ccc333"),
+	line(current3,"c/c4","ccc444"),
+	"c/d	0",
+	line(current1,"c/d/d","ddd"),
+	"g1	0",
+	"g1/g2	0",
+	"g1/g2/g3	0",
+	line(current2,"g1/g2/g3/g","gggg"),
+	"y	1",
+	"z	0",
+	"z/z1	3",
+      });
+
+    compareFiles(dstdir,new Object[]{
+	"b", "bbb", current2,
+	"@l", "x",
+	"@lc", "y",
+	"c", new Object[]{
+	  "c2", "ccc222", current1,
+	  "c3", "ccc333", current2,
+	  "c4", "ccc444", current3,
+	  "d", new Object[] {
+	    "d", "ddd", current1,
+	  },
+	  // 空のディレクトリは作成されない。
+	  /*
+	  "f1", new Object[]{
+	    "f2", new Object[]{
+	      "f3", new Object[]{
+	      },
+	    },
+	  },
+	  */
+	},
+	"g1", new Object[]{
+	  "g2", new Object[]{
+	    "g3", new Object[]{
+	      "g", "gggg", current2,
+	    },
+	  },
+	},
+	"x", "xx",
+	"y", new Object[]{
+	  "y1", "y1data",
+	},
+	"z", new Object[]{
+	  "z1", new Object[]{
+	    "@lc", "../../z",
+	    "@lc1", "../za",
+	    "@lx", "../z1",
+	  },
+	},
+      });
+
+    checkContents(new File(dbdir,"test.src.db"),new String[]{
+	".",
+	"CPjgJgxkQYUQzvsrBu7lzQ	*	3	b",
+	"c",
+	"puUcVpdndkyHnkmklAcKHA	*	6	c2",
+	"nZySmjxYljiQjpaNIMXGZg	*	6	c3",
+	"vopwnoEeXpfV3zpnf9hM4A	*	6	c4",
+	"c/d",
+	"d5Y7epMTd61Kta1qnNcYqg	*	3	d",
+	"g1/g2/g3",
+	"weu0kz4GzlYXSD9mXiZifA	*	4	g",
+      });
+    checkContents(new File(dbdir,"test.dst.db"),new String[]{
+	".",
+	"CPjgJgxkQYUQzvsrBu7lzQ	*	3	b",
+	"c",
+	"puUcVpdndkyHnkmklAcKHA	*	6	c2",
+	"nZySmjxYljiQjpaNIMXGZg	*	6	c3",
+	"vopwnoEeXpfV3zpnf9hM4A	*	6	c4",
+	"c/d",
+	"d5Y7epMTd61Kta1qnNcYqg	*	3	d",
+	"g1/g2/g3",
+	"weu0kz4GzlYXSD9mXiZifA	*	4	g",
+      });
+
+    int idx = ftpurl.lastIndexOf('@');
+    String ftpstr = "ftp://"+ftpurl.substring(idx+1);
+    System.out.println("ftpstr = "+ftpstr);
+    checkEvent(new Object[]{
+	"Start Backup test.src test.dst",
+	"Read DataBase test.src "+dbdir+"/test.src.db", new String[]{
+	  "java.nio.file.NoSuchFileException: "+dbdir+"/test.src.db",
+	},
+	"Scan Folder test.src "+ftpstr, new String[]{
+	  "Ignore file a",
+	  "Ignore file c/c1",
+	  "calculate MD5 b",
+	  "calculate MD5 c/c2",
+	  "calculate MD5 c/c3",
+	  "calculate MD5 c/c4",
+	  "calculate MD5 c/d/d",
+	  "calculate MD5 g1/g2/g3/g",
+	},
+	"Write DataBase test.src "+dbdir+"/test.src.db",
+	"Read DataBase test.dst "+dbdir+"/test.dst.db", new String[]{
+	  "java.nio.file.NoSuchFileException: "+dbdir+"/test.dst.db",
+	},
+	"Scan Folder test.dst "+dstdir.getAbsolutePath(), new String[]{
+	  "Ignore file x",
+	  "Ignore file y/y1",
+	  "Ignore symlink l",
+	  "Ignore symlink lc",
+	  "Ignore symlink z/z1/lc",
+	  "Ignore symlink z/z1/lc1",
+	  "Ignore symlink z/z1/lx",
+	  "calculate MD5 y/y2",
+	  "calculate MD5 c/c2",
+	  "calculate MD5 c/c3",
+	  "calculate MD5 c/c4",
+	  "calculate MD5 z/za",
+	  "calculate MD5 z/z1/zb",
+	  "calculate MD5 z/z1/z2/zc",
+	},
+	"Write DataBase test.dst "+dbdir+"/test.dst.db",
+	"Compare Files test.src test.dst", new String[]{
+	  "copy b",
+	  "copy g1/g2/g3/g",
+	  "copy override c/c2",
+	  "set lastModified c/c4",
+	  "copy c/d/d",
+	  "mkdir c/d",
+	  "mkdir g1",
+	  "mkdir g1/g2",
+	  "mkdir g1/g2/g3",
+	  "delete y/y2",
+	  "delete z/za",
+	  "delete z/z1/zb",
+	  "delete z/z1/z2/zc",
+	  "rmdir z/z1/z2",
+	},
+	"Write DataBase test.dst "+dbdir+"/test.dst.db",
+	"End Backup test.src test.dst",
+      });
+  }
+
+  // scanFolder 単体テスト
+  //@Test
   public void testGetPathHolderList()
   throws Exception
   {
@@ -146,47 +583,51 @@ public class FtpTest
     System.out.format("ftp parameter : host=%s, user=%s, pass=%s, root=%s",ftphost,ftpuser,ftppass,ftproot).println();
   }
 
-  public static FTPClient ftpclient = null;
+  public static class FTPClient extends org.apache.commons.net.ftp.FTPClient implements AutoCloseable
+  {
+    public void close()
+    throws IOException
+    {
+      System.out.println("ftp disconnect");
+      this.disconnect();
+    }
+  }
 
-  // FTPを使ったテストをする場合は、このメソッドを呼ぶ。
-  public static boolean initFTPClient()
+  public static FTPClient initFTPClient()
   throws IOException
   {
-    if ( ftpurl == null ) return false;
-    ftpclient = new FTPClient();
+    FTPClient ftpclient = new FTPClient();
+    /*
+    FTPClientConfig config = new FTPClientConfig();
+    config.setServerTimeZoneId("Asia/Tokyo");
+    ftpclient.configure(config);
+    */
     System.out.println("ftp connect");
     ftpclient.connect(ftphost);
     System.out.println("ftp login");
-    assertTrue(ftpclient.login(ftpuser,ftppass));
-    if ( !FTPReply.isPositiveCompletion(ftpclient.getReplyCode()) )
-      fail("login failed : "+ftpclient.getReplyCode());
+    boolean result = ftpclient.login(ftpuser,ftppass);
+    if ( !result || !FTPReply.isPositiveCompletion(ftpclient.getReplyCode()) )
+      fail("login failed : result = "+result+", code = "+ftpclient.getReplyCode());
     System.out.println("ftp chdir");
-    assertTrue(ftpclient.changeWorkingDirectory(ftproot));
+    result = ftpclient.changeWorkingDirectory(ftproot);
+    if ( !result || !FTPReply.isPositiveCompletion(ftpclient.getReplyCode()) )
+      fail("changeWorkingDirectory failed : result = "+result+", code = "+ftpclient.getReplyCode());
+    ftpclient.enterLocalPassiveMode();
     if ( !FTPReply.isPositiveCompletion(ftpclient.getReplyCode()) )
-      fail("changeWorkingDirectory failed : "+ftpclient.getReplyCode());
-    return true;
-  }
+      fail("changeWorkingDirectory failed : code = "+ftpclient.getReplyCode());
 
-  @After
-  public void disconnectFTPClient()
-  throws IOException
-  {
-    if ( ftpclient != null ) {
-      System.out.println("ftp disconnect");
-      ftpclient.disconnect();
-    }
-    ftpclient = null;
+    return ftpclient;
   }
 
   // ----------------------------------------------------------------------
   // ユーティリティメソッド
 
   // FTP先との比較
-  public static void compareFtpFiles( Object data[] )
+  public static void compareFtpFiles( FTPClient ftpclient, Object data[] )
   throws IOException
   {
     List<Entry> expect = Entry.walkData(data);
-    Map<String,Entry> actual = collectFtpFiles(".");
+    Map<String,Entry> actual = collectFtpFiles(ftpclient,".");
 
     expect = expect.stream()
       .filter(exp->{
@@ -199,19 +640,24 @@ public class FtpTest
 	})
       .collect(Collectors.toList());
     if ( expect.size() > 0 || actual.size() > 0 )
-      fail(String.format("different expect=%s, actual=%s",expect,actual));
+      fail(String.format("different expect=%s, actual=%s",expect,actual.values()));
   }
 
   // FTP先のファイルを取得する。
-  public static Map<String,Entry> collectFtpFiles( String directory )
+  public static Map<String,Entry> collectFtpFiles( FTPClient ftpclient, String directory )
   throws IOException
   {
     HashMap<String,Entry> actual = new HashMap<>();
-    for ( FTPFile file : walkFtp(directory) ) {
+    for ( FTPFile file : walkFtp(ftpclient,directory) ) {
       if ( file.isDirectory() ) continue;
       Entry ent = new Entry();
       ByteArrayOutputStream out = new ByteArrayOutputStream();
-      assertTrue(ftpclient.retrieveFile(file.getName(),out));
+      boolean result = ftpclient.retrieveFile(file.getName(),out);
+      if ( !result || !FTPReply.isPositiveCompletion(ftpclient.getReplyCode()) )
+	fail("retrieveFile : "+file.getName()
+	  +", result = "+result
+	  +", code = "+ftpclient.getReplyCode()
+	  +", message = "+ftpclient.getReplyString());
       ent.contents = new String(out.toByteArray());
       ent.path = Paths.get(file.getName());
       ent.lastModified = new Date(file.getTimestamp().getTimeInMillis());
@@ -221,24 +667,30 @@ public class FtpTest
   }
 
   // FTP先のファイル・フォルダのリストを取得する。
-  public static List<FTPFile> walkFtp( String directory )
+  public static List<FTPFile> walkFtp( FTPClient ftpclient, String directory )
   throws IOException
   {
     LinkedList<FTPFile> list = new LinkedList<>();
-    walkFtp(Paths.get(directory),list);
+    walkFtp(ftpclient,Paths.get(directory),list);
     return list;
   }
 
   // FTP先のファイル・フォルダのリストを取得する。
-  public static void walkFtp( Path directory, List<FTPFile> list )
+  public static void walkFtp( FTPClient ftpclient, Path directory, List<FTPFile> list )
   throws IOException
   {
-    for ( FTPFile file : ftpclient.mlistDir(directory.toString()) ) {
+    FTPFile array[] = ftpclient.mlistDir(directory.toString());
+    if ( array == null || !FTPReply.isPositiveCompletion(ftpclient.getReplyCode()) )
+      fail("mlistDir failed : "+directory
+	+", array = "+Arrays.asList(array)
+	+", code = "+ftpclient.getReplyCode()
+	+", message = "+ftpclient.getReplyString());
+    for ( FTPFile file : array ) {
       String name = file.getName();
       Path full = directory.resolve(name).normalize();
       if ( file.isDirectory() ) {
 	if ( name.equals(".") || name.equals("..") ) continue;
-	walkFtp(full,list);
+	walkFtp(ftpclient,full,list);
       }
       file.setName(full.toString());
       list.add(file);
@@ -246,40 +698,83 @@ public class FtpTest
   }
 
   // FTP先にファイルを生成する。
-  public static void createFtpFiles( Object data[] )
+  public static void createFtpFiles( FTPClient ftpclient, Object data[] )
   throws IOException
   {
-    clearFtpFiles(".");
+    clearFtpFiles(ftpclient,".");
     for ( Entry ent : Entry.walkData(data,true) ) {
       if ( ent.contents == null ) {
-	assertTrue(ftpclient.makeDirectory(ent.path.toString()));
-	if ( !FTPReply.isPositiveCompletion(ftpclient.getReplyCode()) ) fail("makeDirectory failed : "+ftpclient.getReplyCode());
+	boolean result = ftpclient.makeDirectory(ent.path.toString());
+	if ( !result || !FTPReply.isPositiveCompletion(ftpclient.getReplyCode()) )
+	  fail("makeDirectory failed : path = "+ent.path+", result = "+result+", code = "+ftpclient.getReplyCode());
       } else {
 	ByteArrayInputStream in = new ByteArrayInputStream(ent.contents.getBytes());
-	assertTrue(ftpclient.storeFile(ent.path.toString(),in));
-	if ( !FTPReply.isPositiveCompletion(ftpclient.getReplyCode()) ) fail("storeFile failed : "+ftpclient.getReplyCode());
+	boolean result = ftpclient.storeFile(ent.path.toString(),in);
+	if ( !result || !FTPReply.isPositiveCompletion(ftpclient.getReplyCode()) )
+	  fail("storeFile failed  : path = "+ent.path
+	    +", result"+result
+	    +", code = "+ftpclient.getReplyCode()
+	    +", message = "+ftpclient.getReplyString());
+	if ( ent.lastModified != null ) {
+	  result = ftpclient.setModificationTime(ent.path.toString(),FtpStorage.FTPTIMEFORM.format(ent.lastModified));
+	  if ( !result || !FTPReply.isPositiveCompletion(ftpclient.getReplyCode()) )
+	    fail("setModificationTime failed : path = "+ent.path
+	      +", time = "+FtpStorage.FTPTIMEFORM.format(ent.lastModified)
+	      +", result = "+result
+	      +", code = "+ftpclient.getReplyCode()
+	      +", message = "+ftpclient.getReplyString());
+	}
       }
     }
   }
 
   // FTP先のファイル・フォルダを削除する。
-  public static void clearFtpFiles( String directory )
+  public static void clearFtpFiles( FTPClient ftpclient, String directory )
   throws IOException
   {
-    for ( FTPFile file : walkFtp(directory) ) {
+    for ( FTPFile file : walkFtp(ftpclient,directory) ) {
       String name = file.getName();
       String full = Paths.get(directory).resolve(name).normalize().toString();
       if ( file.isDirectory() ) {
 	System.out.println("removeDirectory "+full);
-	assertTrue(ftpclient.removeDirectory(full));
-	if ( !FTPReply.isPositiveCompletion(ftpclient.getReplyCode()) ) fail("removeDirectory failed : "+ftpclient.getReplyCode());
+	boolean result = ftpclient.removeDirectory(full);
+	if ( !result || !FTPReply.isPositiveCompletion(ftpclient.getReplyCode()) )
+	  fail("removeDirectory failed : result = "
+	    +result+", code = "
+	    +ftpclient.getReplyCode()
+	    +", message = "+ftpclient.getReplyString());
       } else {
 	System.out.println("deleteFile "+full);
-	assertTrue(ftpclient.deleteFile(full));
-	if ( !FTPReply.isPositiveCompletion(ftpclient.getReplyCode()) ) fail("deleteFile failed : "+ftpclient.getReplyCode());
+	boolean result = ftpclient.deleteFile(full);
+	if ( !result || !FTPReply.isPositiveCompletion(ftpclient.getReplyCode()) )
+	  fail("deleteFile failed : result = "+result
+	    +", code = "+ftpclient.getReplyCode()
+	    +", message = "+ftpclient.getReplyString());
       }
     }
   }
+
+  // Date 型のミリ秒部分を削除する。
+  public static Date zero( Date orig )
+  {
+    return new Date(orig.getTime()/1000L*1000L);
+  }
+
+  public static String dateftp( File dir, String filename )
+  throws IOException
+  {
+    return BackuperTest.FORM.format(zero(lastModified(dir,filename)));
+  }
+
+  /*
+  public static String linezero( File dir, String path, String contents )
+  throws IOException
+  {
+    int idx = path.lastIndexOf('/');
+    String name = idx < 0 ? path : path.substring(idx+1);
+    return BackuperTest.MD5(contents)+'\t'+dateftp(dir,path)+'\t'+contents.length()+'\t'+name;
+  }
+  */
 
   // ----------------------------------------------------------------------
   // ユーティリティメソッドのテスト
@@ -288,8 +783,10 @@ public class FtpTest
   public void clearFtpFilesTest()
   throws Exception
   {
-    if ( !initFTPClient() ) return;
-    clearFtpFiles(".");
+    if ( ftpurl == null ) return;
+    try ( FTPClient ftpclient = initFTPClient() ) {
+      clearFtpFiles(ftpclient,".");
+    }
   }
 
   @Test
@@ -340,10 +837,12 @@ public class FtpTest
   public void testWalkFtp()
   throws Exception
   {
-    if ( !initFTPClient() ) return;
-    System.out.println("walkFtp - start");
-    walkFtp(".").stream().forEach(f->System.out.println("FTPFile "+f.getName()+" "+f));
-    System.out.println("walkFtp - end");
+    if ( ftpurl == null ) return;
+    try ( FTPClient ftpclient = initFTPClient() ) {
+      System.out.println("walkFtp - start");
+      walkFtp(ftpclient,".").stream().forEach(f->System.out.println("FTPFile "+f.getName()+" "+f));
+      System.out.println("walkFtp - end");
+    }
   }
 
   @Test
@@ -353,4 +852,38 @@ public class FtpTest
     assertEquals("a",path.resolve("a").normalize().toString());
   }
 
+  /****
+   * 時刻更新のテスト
+   * テスト結果: (TimeZoneの設定に関係ない)
+   *                    コンパネ   emacs+ftp   FTPFile   プログラム
+   * コンパネで編集後   その時刻    その時刻    -9時間    その時刻
+   * プログラム実行後	 +9時間      +9時間    その時刻    +9時間
+   * Locale.ROOT	 +9時間      +9時間    その時刻    +9時間
+   * setTimeZone("GMT") その時刻    その時刻    -9時間    その時刻
+   ****/
+  //@Test
+  public void testTime()
+  throws IOException
+  {
+    /*
+    System.out.println("time zone for 0 - start");
+    Stream.of(TimeZone.getAvailableIDs(0)).forEach(System.out::println);
+    System.out.println("time zone for 0 - end");
+    */
+    if ( ftpurl == null ) return;
+    try ( FTPClient ftpclient = initFTPClient() ) {
+      System.out.println("testTime - srat");
+      for ( FTPFile file : ftpclient.mlistDir("../www/share") ) {
+	if ( file.getName().equals("test") ) {
+	  System.out.println("file = "+file);
+	  System.out.println("orig = "+FORM.format(new Date(file.getTimestamp().getTimeInMillis())));
+	  String strtime = FTPTIMEFORM.format(new Date());
+	  System.out.println("strtime = "+strtime);
+	  boolean result = ftpclient.setModificationTime("../www/share/test",strtime);
+	  System.out.println("result = "+result);
+	}
+      }
+      System.out.println("testTime - end");
+    }
+  }
 }

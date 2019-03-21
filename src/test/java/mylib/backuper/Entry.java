@@ -82,7 +82,7 @@ public class Entry
    * ディレクトリ構造を表すデータを List に変換する。
    *
    * @param data ディレクトリ構造を表すデータ
-   * @param dirFirst
+   * @param dirFirst<br>
    *           未指定 : ディレクトリなし<br>
    *           true   : ディレクトリ→ファイルの順 (ファイル生成時に使用)<br>
    *           false  : ファイル→ディレクトリの順 (ファイル削除時に使用)
@@ -108,7 +108,7 @@ public class Entry
    * @param list フラット化したファイルとディレクトリを入れる場所
    * @param dir 取得するディレクトリ
    * @param data ディレクトリ構造を表すデータ
-   * @param option 
+   * @param option<br>
    *           0 : ディレクトリなし<br>
    *           1 : ディレクトリ→ファイルの順 (ファイル生成時に使用)<br>
    *           2 : ファイル→ディレクトリの順 (ファイル削除時に使用)

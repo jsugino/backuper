@@ -67,12 +67,15 @@ public class Backuper
   public static void backup( Storage srcStorage, Storage dstStorage )
   throws IOException
   {
+    if ( dstStorage == null ) {
+      refresh(srcStorage);
+      return;
+    }
+
     log.info("Start Backup "+srcStorage.storageName+" "+dstStorage.storageName);
     srcStorage.readDB();
     srcStorage.scanFolder();
     srcStorage.writeDB();
-
-    if ( dstStorage == null ) return;
 
     dstStorage.readDB();
     dstStorage.scanFolder();
@@ -116,6 +119,16 @@ public class Backuper
     dstStorage.writeDB();
 
     log.info("End Backup "+srcStorage.storageName+" "+dstStorage.storageName);
+  }
+
+  public static void refresh( Storage storage )
+  throws IOException
+  {
+    log.info("Start Refresh "+storage.storageName);
+    storage.readDB();
+    storage.scanFolder();
+    storage.writeDB();
+    log.info("End Refresh "+storage.storageName);
   }
 
   public static void usage()

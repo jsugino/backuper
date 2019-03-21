@@ -46,9 +46,11 @@ public class DataBase extends HashMap<String,DataBase.Storage> implements Closea
       this.storageName = storageName;
     }
 
+    public abstract long timeUnit();
+
     public abstract String getRoot();
 
-    public abstract boolean mkParentDir( Path path ) throws IOException;
+    public abstract void makeDirectory( Path path ) throws IOException;
 
     public abstract InputStream newInputStream( Path path ) throws IOException;
 
@@ -64,11 +66,17 @@ public class DataBase extends HashMap<String,DataBase.Storage> implements Closea
 
     // --------------------------------------------------
     public Folder getFolder( Path path )
+    throws IOException
     {
+      log.trace("getFolder : "+path);
+      if ( path == null ) path = Paths.get(".");
       Folder folder = findFromList(folders,path);
       if ( folder == null ) {
 	folder = new Folder(path);
 	registerToList(folders,folder);
+	getFolder(path.getParent());
+	log.info("mkdir "+path);
+	makeDirectory(path);
       }
       return folder;
     }
@@ -153,14 +161,12 @@ public class DataBase extends HashMap<String,DataBase.Storage> implements Closea
 	registerToList(dstFolder.files,dstFile);
 	command = "copy ";
       }
+      long unit = Math.max(srcStorage.timeUnit(),dstStorage.timeUnit());
       dstFile.hashValue = srcFile.hashValue;
       dstFile.length = srcFile.length;
-      dstFile.lastModified = srcFile.lastModified;
+      dstFile.lastModified = srcFile.lastModified/unit*unit;
 
       log.info(command+filePath);
-      if ( dstStorage.mkParentDir(dstFile.filePath) ) {
-	log.info("mkdir "+dstFile.filePath.getParent());
-      }
       try ( 
 	InputStream  in  = this.newInputStream(srcFile.filePath);
 	OutputStream out = dstStorage.newOutputStream(dstFile.filePath);
@@ -185,10 +191,13 @@ public class DataBase extends HashMap<String,DataBase.Storage> implements Closea
       Folder dstFolder = findFromList(dstStorage.folders,parentPath);
       File   dstFile   = findFromList(dstFolder.files,filePath);
 
-      if ( dstFile.lastModified == srcFile.lastModified ) return;
+      long unit = Math.max(srcStorage.timeUnit(),dstStorage.timeUnit());
+      log.trace(String.format("unit = %d, path = %s, src = %3$tF %3$tT.%3$tL, dst = %4$tF %4$tT.%4$tL",
+	  unit,filePath,srcFile.lastModified,dstFile.lastModified));
+      if ( dstFile.lastModified/unit == srcFile.lastModified/unit ) return;
 
       log.info("set lastModified "+dstFile.filePath);
-      dstFile.lastModified = srcFile.lastModified;
+      dstFile.lastModified = srcFile.lastModified/unit*unit;
       dstStorage.setLastModified(dstFile.filePath,dstFile.lastModified);
     }
 
@@ -233,7 +242,7 @@ public class DataBase extends HashMap<String,DataBase.Storage> implements Closea
     public void scanFolder()
     throws IOException
     {
-      log.debug("Scan Folder "+storageName+' '+getRoot());
+      log.info("Scan Folder "+storageName+' '+getRoot());
 
       LinkedList<Folder> origFolders = folders;
       folders = new LinkedList<Folder>();
@@ -493,10 +502,6 @@ public class DataBase extends HashMap<String,DataBase.Storage> implements Closea
   public void close()
   throws IOException
   {
-    try {
-      for ( Storage storage : values() ) storage.close();
-    } finally {
-      clear();
-    }
+    for ( Storage storage : values() ) storage.close();
   }
 }
