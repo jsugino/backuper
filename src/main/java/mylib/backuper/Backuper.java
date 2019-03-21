@@ -4,6 +4,7 @@ import java.io.IOException;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.Comparator;
 import java.util.Date;
 import java.util.LinkedList;
@@ -82,9 +83,42 @@ public class Backuper
     dstStorage.writeDB();
 
     log.debug("Compare Files "+srcStorage.storageName+" "+dstStorage.storageName);
-    LinkedList<File> frlist = toFileList(srcStorage);
-    LinkedList<File> tolist = toFileList(dstStorage);
-    LinkedList<File> copylist = compare(frlist,tolist);
+    LinkedList<File> frlist = toFileList(srcStorage); // ソートされたListに変換
+    LinkedList<File> tolist = toFileList(dstStorage); // ソートされたListに変換
+    LinkedList<File> copylist = compare(frlist,tolist); // 同じものを取り出す。frlist, tolist にはそれ以外が残る。
+
+    // tolist means "delete"
+    log.trace("start delete from "+dstStorage.getRoot());
+    for ( File file : tolist ) {
+      //file.dump(System.err);
+      dstStorage.deleteFile(file.filePath);
+    }
+
+    // delete empty folder
+    log.trace("clean folder "+dstStorage.getRoot());
+    dstStorage.cleanupFolder();
+
+    // check : file in src --> file in dst
+    ListIterator<File> itr = frlist.listIterator();
+    while ( itr.hasNext() ) {
+      File file = itr.next();
+      boolean first = true;
+      boolean find = false;
+      next:
+      for ( Path path = file.filePath; path != null; path = path.getParent() ) {
+	for ( Folder dfld : dstStorage.folders ) {
+	  if ( first && path.equals(dfld.folderPath) ) { find = true; break next; }
+	  for ( Path ign : dfld.ignores ) {
+	    if ( path.equals(ign) ) { find = true; break next; }
+	  }
+	}
+	first = false;
+      }
+      if ( find ) {
+	log.error("CANNOT COPY "+file.filePath);
+	itr.remove();
+      }
+    }
 
     // frlist means "copy"
     log.trace("start copy from "+srcStorage.getRoot()+" to "+dstStorage.getRoot());
@@ -100,13 +134,6 @@ public class Backuper
       srcStorage.copyFile(file.filePath,dstStorage);
     }
 
-    // tolist means "delete"
-    log.trace("start delete from "+dstStorage.getRoot());
-    for ( File file : tolist ) {
-      //file.dump(System.err);
-      dstStorage.deleteFile(file.filePath);
-    }
-
     // set lastModifed
     for ( Folder folder : dstStorage.folders ) {
       for ( File file : folder.files ) {
@@ -114,8 +141,7 @@ public class Backuper
       }
     }
 
-    log.trace("clean folder "+dstStorage.getRoot());
-    dstStorage.cleanupFolder();
+    // write DB
     dstStorage.writeDB();
 
     log.info("End Backup "+srcStorage.storageName+" "+dstStorage.storageName);
@@ -149,11 +175,7 @@ public class Backuper
       }
     }
 
-    File array[] = new File[list.size()];
-    array = list.toArray(array);
-    Arrays.sort(array,Comparator.comparing(file -> file.filePath));
-    ListIterator<File> itr = list.listIterator();
-    for ( int i = 0; itr.hasNext(); ++i ) { itr.next(); itr.set(array[i]); }
+    Collections.sort(list,Comparator.comparing(file -> file.filePath));
 
     File prev = null;
     for ( File file : list ) {

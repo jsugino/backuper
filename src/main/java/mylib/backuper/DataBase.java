@@ -222,7 +222,7 @@ public class DataBase extends HashMap<String,DataBase.Storage> implements Closea
       HashMap<Path,Integer> map = new HashMap<>();
       int i = 0;
       for ( Folder folder : this.folders ) {
-	int n = folder.ignoreCounts + folder.files.size();
+	int n = folder.ignores.size() + folder.files.size();
 	for ( Path p = folder.folderPath; p != null; p = p.getParent() ) {
 	  map.put(p,map.getOrDefault(p,0)+n);
 	}
@@ -260,7 +260,7 @@ public class DataBase extends HashMap<String,DataBase.Storage> implements Closea
 	    for ( Pattern pat : ignoreFolderPats ) {
 	      if ( pat.matcher(relpath.toString()).matches() ) {
 		log.debug("Ignore folder "+relpath);
-		++folder.ignoreCounts;
+		folder.ignores.add(relpath);
 		continue nextPath;
 	      }
 	    }
@@ -269,14 +269,14 @@ public class DataBase extends HashMap<String,DataBase.Storage> implements Closea
 	    File file = (File)holder;
 	    if ( file.type == File.FileType.SYMLINK ) {
 	      log.debug("Ignore symlink "+holder.getPath());
-	      ++folder.ignoreCounts;
+	      folder.ignores.add(holder.getPath());
 	      continue nextPath;
 	    }
 	    log.trace("scan file "+relpath);
 	    for ( Pattern pat : ignoreFilePats ) {
 	      if ( pat.matcher(relpath.getFileName().toString()).matches() ) {
 		log.debug("Ignore file "+relpath);
-		++folder.ignoreCounts;
+		folder.ignores.add(relpath);
 		continue nextPath;
 	      }
 	    }
@@ -304,7 +304,7 @@ public class DataBase extends HashMap<String,DataBase.Storage> implements Closea
     public void dump( PrintStream out )
     {
       for ( Folder folder : folders ) {
-	out.println(folder.folderPath.toString()+'\t'+folder.ignoreCounts);
+	out.println(folder.folderPath.toString()+'\t'+folder.ignores.size());
 	for ( File file : folder.files ) {
 	  file.dump(out);
 	}
@@ -337,7 +337,7 @@ public class DataBase extends HashMap<String,DataBase.Storage> implements Closea
   {
     public Path folderPath;
     public LinkedList<File> files = new LinkedList<>();
-    public int ignoreCounts = 0;
+    public LinkedList<Path> ignores = new LinkedList<>();
 
     public Folder( Path folderPath )
     {

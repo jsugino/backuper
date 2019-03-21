@@ -346,7 +346,15 @@ public class BackuperTest
 	  "5", "5", current,
 	  "6", new Object[]{
 	    "1", "6/1", current,
-	    "2", "6/2", current
+	    "2", "6/2", current,
+	  },
+	  "dir", new Object[] {
+	    "a", "aaa",
+	    "x", new Object[] {
+	      "x1", "x/x1", current,
+	    },
+	    "y", "y", current,
+	    "z", "z", current,
 	  },
 	},
 	"dst", new Object[]{
@@ -360,24 +368,19 @@ public class BackuperTest
 	    "2", "6/2", current,
 	    "3", "6/3", current,
 	  },
+	  "dir", new Object[] {
+	    "b", "bbb",
+	    "@x", "2",
+	    "@y", "3",
+	    "z", new Object[] {
+	      "c", "ccc",
+	      "@z1", "../4",
+	    },
+	  },
 	},
       });
 
-    /*
-    // 以下は、同一名でディレクトリとファイルが違っていた場合の対応ができてから実行する。
-
-    System.out.println("--- ORIG ---");
-    printFolders(root);
-
-    execute(root,dbdir);
-
-    System.out.println("--- ANSWER ---");
-    printFolders(tempdir.getRoot());
-
-    System.out.println("--- Database (start) ---");
-    cat(new File(dbdir,"test.src.db"));
-    cat(new File(dbdir,"test.dst.db"));
-    System.out.println("--- Database (end) ---");
+    DataBase db = execute(root,dbdir);
 
     compareFiles(dstdir,new Object[]{
 	"1", "1", current,
@@ -388,10 +391,74 @@ public class BackuperTest
 	"5", "5", current,
 	"6", new Object[]{
 	  "1", "6/1", current,
-	  "2", "6/2", current
+	  "2", "6/2", current,
+	},
+	"dir", new Object[] {
+	  "a", "aaa",
+	  "@x", "2",
+	  "@y", "3",
+	  "z", new Object[] {
+	    "@z1", "../4",
+	  },
 	},
       });
-    */
+
+    checkEvent(new Object[]{
+	"Start Backup test.src test.dst",
+	"Read DataBase test.src "+dbdir+"/test.src.db", new String[]{
+	  "java.nio.file.NoSuchFileException: "+dbdir+"/test.src.db",
+	},
+	"Scan Folder test.src "+srcdir.getAbsolutePath(), new String[]{
+	  "calculate MD5 1",
+	  "calculate MD5 2",
+	  "calculate MD5 4/1",
+	  "calculate MD5 5",
+	  "calculate MD5 6/1",
+	  "calculate MD5 6/2",
+	  "calculate MD5 dir/a",
+	  "calculate MD5 dir/x/x1",
+	  "calculate MD5 dir/y",
+	  "calculate MD5 dir/z",
+	},
+	"Write DataBase test.src "+dbdir+"/test.src.db",
+	"Read DataBase test.dst "+dbdir+"/test.dst.db", new String[]{
+	  "java.nio.file.NoSuchFileException: "+dbdir+"/test.dst.db",
+	},
+	"Scan Folder test.dst "+dstdir.getAbsolutePath(), new String[]{
+	  "calculate MD5 2",
+	  "calculate MD5 3",
+	  "calculate MD5 4",
+	  "calculate MD5 5/1",
+	  "calculate MD5 6/2",
+	  "calculate MD5 6/3",
+	  "calculate MD5 dir/b",
+	  "calculate MD5 dir/z/c",
+	  "Ignore symlink dir/x",
+	  "Ignore symlink dir/y",
+	  "Ignore symlink dir/z/z1",
+	},
+	"Write DataBase test.dst "+dbdir+"/test.dst.db",
+	"Compare Files test.src test.dst", new String[]{
+	  "copy 1",
+	  "delete 3",
+	  "delete 4",
+	  "mkdir 4",
+	  "copy 4/1",
+	  "delete 5/1",
+	  "rmdir 5",
+	  "copy 5",
+	  "copy 6/1",
+	  "delete 6/3",
+	  "copy dir/a",
+	  "delete dir/b",
+	  "delete dir/z/c",
+	  "CANNOT COPY dir/x/x1",
+	  "CANNOT COPY dir/y",
+	  "CANNOT COPY dir/z",
+	},
+	"Write DataBase test.dst "+dbdir+"/test.dst.db",
+	"End Backup test.src test.dst",
+      });
   }
 
   // ----------------------------------------------------------------------
@@ -725,7 +792,7 @@ public class BackuperTest
 
   // Path の比較 compareTo() の挙動の調査
   // 各パスを手繰りながら比較するのではなく、単に全体を文字列として比較している。
-  @Test
+  //@Test
   public void testPath()
   {
     System.out.println("Path.class="+Paths.get(".").getClass().getName());

@@ -47,3 +47,7 @@ linux.home.src=/home/junsei	# 識別名 "linux.home.src" のフォルダ名
 linux.dst1=/mnt/C/BACKUP/Linux/home/junsei
 
 linux.dst2=/mnt/D/Linux/home/junsei
+
+[エラー対応方法]
+"CANNOT COPY" と表示されるのは、コピー先に無視する対象のファイルがあり、上書きコピーできないためである。
+内容を確認し、不必要なら手で削除をして、再度バックアップ処理をすること。
