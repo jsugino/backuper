@@ -1,5 +1,10 @@
 ToDo
-
+・スキャンしない場合でも、ignoreがあっても良いようにする。
+・ファイル数が巨大だと、効率が悪くなる。Storage の folders に TreeMap を使用する。
+・Scan中に *.db ファイルを書き出すオプションを実装する。(Ctrl-Cで止めても良いように)
+・ログにStorage名も出力する。
+・db の一部を別の sub-db に分けられるようにする。
+・folders.conf の書式をわかりやすいものにする。
 ・ファイルのパターンマッチが仕様書どおりでない。
   - "/c1" を無視する様に指定しても、"/c/c1" も無視されてしまう。
   - "/c/c1" を無視する様に指定しても、"/c/c1" が無視されない。
@@ -11,11 +16,24 @@ ToDo
 ・複数のバックアップを同時にできるようにする。
   - 辞書の読み込みを最小化させる。
 ・日付を付きのバックアップファイルを作成するようにする。
-・テストプログラムを付ける。
-・Storage の folders に TreeMap を使用する。
-・デバッグ出力を制限することが出来るようにする。
+・より多岐に渡るテストプログラムを作成する。
 
 ======================================================================
+2019/3/22
+・シミュレート機能を実装した。(ScanもCopyもDeleteもしない。)
+・スキャンしないオプションを実装した。
+・set lastModified を効率化した。(ファイル数の二乗をn*log(n)にした)
+・次のエラーが発生したが解消した。
+java.nio.file.FileAlreadyExistsException: /run/media/junsei/HD-LBU3/OldBackup/.
+	at java.nio.file.Files.createDirectory(Files.java:674)
+	at mylib.backuper.LocalStorage.makeDirectory(LocalStorage.java:52)
+	at mylib.backuper.DataBase$Storage.getFolder(DataBase.java:79)
+	at mylib.backuper.DataBase$Storage.getFolder(DataBase.java:77)
+	at mylib.backuper.DataBase$Storage.copyFile(DataBase.java:156)
+	at mylib.backuper.Backuper.backup(Backuper.java:161)
+	at mylib.backuper.Backuper.main(Backuper.java:61)
+・新しいバックアッププログラムを使って、外付ディスクにバックアップした。
+
 2019/3/21
 ・FTPStorage を完成させた。
 ・同一名でディレクトリとファイルが違っていた場合、CANNOT COPY と表示すようにした。

@@ -461,6 +461,70 @@ public class BackuperTest
       });
   }
 
+  @Test
+  public void testNoRoot()
+  throws Exception
+  {
+    File root = tempdir.getRoot();
+    File dbdir = new File(root,"dic");
+    File srcdir = new File(root,"src");
+    File dstdir = new File(root,"dst");
+    Date current = new Date(System.currentTimeMillis() - 10000L);
+    createFiles(root,new Object[]{
+	"dic", new Object[]{
+	  DataBase.CONFIGNAME, new String[]{
+	    "test.src="+srcdir.getAbsolutePath(),
+	    "test.dst="+dstdir.getAbsolutePath(),
+	  },
+	},
+	"src", new Object[]{
+	  "1", "1", current,
+	  "2", "2",
+	  "3", new Object[]{
+	    "1", "3/1",
+	    "2", "3/2",
+	    "4", new Object[]{
+	      "1", "3/4/1", current,
+	    },
+	  },
+	},
+	"dst", new Object[]{
+	  "3", new Object[]{
+	    "4", new Object[]{
+	      "1", "3/4/1", current,
+	    }
+	  },
+	},
+      });
+
+    try ( DataBase db = new DataBase(dbdir.toPath()) ) {
+      DataBase.Storage srcStorage = db.get("test.src");
+      DataBase.Storage dstStorage = db.get("test.dst");
+      Backuper.refresh(srcStorage);
+      Backuper.refresh(dstStorage);
+    }
+
+    try ( DataBase db = new DataBase(dbdir.toPath()) ) {
+      Backuper.skipScan = true;
+      DataBase.Storage srcStorage = db.get("test.src");
+      DataBase.Storage dstStorage = db.get("test.dst");
+      Backuper.backup(srcStorage,dstStorage);
+      Backuper.skipScan = false;
+    }
+
+    compareFiles(dstdir,new Object[]{
+	"1", "1", current,
+	"2", "2",
+	"3", new Object[]{
+	  "1", "3/1",
+	  "2", "3/2",
+	  "4", new Object[]{
+	    "1", "3/4/1", current,
+	  },
+	},
+      });
+  }
+
   // ----------------------------------------------------------------------
   // ユーティリティメソッド
 

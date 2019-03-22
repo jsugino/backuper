@@ -22,70 +22,113 @@ public class Backuper
 {
   private final static Logger log = LoggerFactory.getLogger(Backuper.class);
 
+  // execute options
+  static public boolean debugMode = false;
+
+  static public boolean skipScan = false;
+
+  public static class UsageException extends RuntimeException
+  {
+    public UsageException() { super(); }
+    public UsageException( String message ) { super(message); }
+    public UsageException( String message, Throwable cause ) { super(message,cause); }
+    public UsageException( Throwable cause ) { super(cause); }
+  }
+
   public static void main( String argv[] )
   {
     LinkedList<String> args = new LinkedList<>();
     args.addAll(Arrays.asList(argv));
 
-    String arg;
-    if ( (arg = args.poll()) == null ) { usage(); return; }
-
-    boolean debugMode = false;
-    if ( arg.startsWith("-") ) {
-      if ( arg.equals("-d") ) {
-	debugMode = true;
-      } else { usage(); return; }
-      if ( (arg = args.poll()) == null ) { usage(); return; }
-    }
+    String arg = getArg(args);
 
     Path dbFolder = Paths.get(arg);
 
     try ( DataBase db = new DataBase(dbFolder) ) {
-      if ( (arg = args.poll()) == null ) { usage(); return; }
+      arg = getArg(args);
       Storage srcStorage = db.get(arg);
-      if ( srcStorage == null ) {
-	log.error("Illegal Storage Name : "+arg);
-	usage();
-	return;
-      }
+      if ( srcStorage == null ) throw new UsageException("Illegal Storage Name : "+arg);
 
-      Storage dstStorage = null;
-      if ( (arg = args.poll()) != null ) {
-	dstStorage = db.get(arg);
-	if ( dstStorage == null ) {
-	  log.error("Illegal Storage Name : "+args.getFirst());
-	  return;
+      arg = getArg(args,false);
+      if ( arg == null ) {
+	refresh(srcStorage);
+      } else {
+	Storage dstStorage = db.get(arg);
+	if ( dstStorage == null ) throw new UsageException("Illegal Storage Name : "+arg);
+	if ( debugMode ) {
+	  simulate(srcStorage,dstStorage);
+	} else {
+	  backup(srcStorage,dstStorage);
 	}
       }
-
-      backup(srcStorage,dstStorage);
-
+    } catch ( UsageException ex ) {
+      log.error(ex.getMessage(),ex);
+      System.err.println(ex.getMessage());
+      System.err.println("usage : java -jar file.jar [-sd] dic.folder src.name [dst.name]");
+      System.err.println("    dic.folder : database folder");
+      System.err.println("    src.name   : source id");
+      System.err.println("    dst.name   : destination id");
+      System.err.println("  Option");
+      System.err.println("    -s         : skip scan DB");
+      System.err.println("    -d         : debug mode (no scan, no copy, no delete)");
     } catch ( Exception ex ) {
       log.error(ex.getMessage(),ex);
     }
   }
 
+  public static String getArg( LinkedList<String> args )
+  {
+    return getArg(args,true);
+  }
+
+  public static String getArg( LinkedList<String> args, boolean throwflag )
+  {
+    String arg;
+    while ( (arg = args.poll()) != null ) {
+      if ( !arg.startsWith("-") ) return arg;
+      for ( int i = 1; i < arg.length(); ++i ) {
+	switch ( arg.charAt(i) ) {
+	case 'd':
+	  debugMode = true;
+	  break;
+	case 's':
+	  skipScan = true;
+	  break;
+	default:
+	  throw new UsageException("Illegal Option : "+arg);
+	}
+      }
+    }
+    if ( throwflag ) throw new UsageException("Not enough arguments");
+    return null;
+  }
+
   public static void backup( Storage srcStorage, Storage dstStorage )
   throws IOException
   {
-    if ( dstStorage == null ) {
-      refresh(srcStorage);
-      return;
-    }
-
     log.info("Start Backup "+srcStorage.storageName+" "+dstStorage.storageName);
     srcStorage.readDB();
-    srcStorage.scanFolder();
-    srcStorage.writeDB();
+    if ( skipScan ) {
+      srcStorage.complementFolders();
+    } else {
+      srcStorage.scanFolder();
+      srcStorage.writeDB();
+    }
 
     dstStorage.readDB();
-    dstStorage.scanFolder();
-    dstStorage.writeDB();
+    if ( skipScan ) {
+      dstStorage.complementFolders();
+    } else {
+      dstStorage.scanFolder();
+      dstStorage.writeDB();
+    }
 
     log.debug("Compare Files "+srcStorage.storageName+" "+dstStorage.storageName);
+    long unit = Math.max(srcStorage.timeUnit(),dstStorage.timeUnit());
     LinkedList<File> frlist = toFileList(srcStorage); // ソートされたListに変換
     LinkedList<File> tolist = toFileList(dstStorage); // ソートされたListに変換
-    LinkedList<File> copylist = compare(frlist,tolist); // 同じものを取り出す。frlist, tolist にはそれ以外が残る。
+    LinkedList<File> difftimelist = new LinkedList<>();
+    LinkedList<File> copylist = compare(frlist,tolist,difftimelist,unit); // frlist, tolist にはそれ以外が残る。
 
     // tolist means "delete"
     log.trace("start delete from "+dstStorage.getRoot());
@@ -124,21 +167,23 @@ public class Backuper
     log.trace("start copy from "+srcStorage.getRoot()+" to "+dstStorage.getRoot());
     for ( File file : frlist ) {
       //file.dump(System.err);
-      srcStorage.copyFile(file.filePath,dstStorage);
+      srcStorage.copyFile(file.filePath,dstStorage,false);
     }
 
     // copylist means "copy override"
     log.trace("start copy override from "+srcStorage.getRoot()+" to "+dstStorage.getRoot());
     for ( File file : copylist ) {
       //file.dump(System.err);
-      srcStorage.copyFile(file.filePath,dstStorage);
+      srcStorage.copyFile(file.filePath,dstStorage,true);
     }
 
     // set lastModifed
-    for ( Folder folder : dstStorage.folders ) {
-      for ( File file : folder.files ) {
-	dstStorage.setLastModified(file.filePath,srcStorage);
-      }
+    for ( File file : difftimelist ) {
+      log.info("set lastModified "+file.filePath);
+      Folder dstFolder = DataBase.findFromList(dstStorage.folders,file.filePath.getParent());
+      File dstFile = DataBase.findFromList(dstFolder.files,file.filePath);
+      dstFile.lastModified = file.lastModified/unit*unit;
+      dstStorage.setLastModified(file.filePath,file.lastModified);
     }
 
     // write DB
@@ -157,12 +202,44 @@ public class Backuper
     log.info("End Refresh "+storage.storageName);
   }
 
-  public static void usage()
+  public static void simulate( Storage srcStorage, Storage dstStorage )
+  throws IOException
   {
-    System.err.println("usage : java -jar file.jar dic.folder src.name [dst.name]");
-    System.err.println("    dic.folder : database folder");
-    System.err.println("    src.name   : source id");
-    System.err.println("    dst.name   : destination id");
+    log.info("Start Simulation "+srcStorage.storageName+" "+dstStorage.storageName);
+    srcStorage.readDB();
+    dstStorage.readDB();
+
+    log.debug("Compare Files "+srcStorage.storageName+" "+dstStorage.storageName);
+    long unit = Math.max(srcStorage.timeUnit(),dstStorage.timeUnit());
+    LinkedList<File> frlist = toFileList(srcStorage); // ソートされたListに変換
+    LinkedList<File> tolist = toFileList(dstStorage); // ソートされたListに変換
+    LinkedList<File> difftimelist = new LinkedList<>();
+    LinkedList<File> copylist = compare(frlist,tolist,difftimelist,unit); // frlist, tolist にはそれ以外が残る。
+
+    // tolist means "delete"
+    log.trace("simulate delete from "+dstStorage.getRoot());
+    for ( File file : tolist ) {
+      log.info("delete "+file.filePath);
+    }
+
+    // frlist means "copy"
+    log.trace("simulate copy from "+srcStorage.getRoot()+" to "+dstStorage.getRoot());
+    for ( File file : frlist ) {
+      log.info("copy "+file.filePath);
+    }
+
+    // copylist means "copy override"
+    log.trace("simulate copy override from "+srcStorage.getRoot()+" to "+dstStorage.getRoot());
+    for ( File file : copylist ) {
+      log.info("copy override "+file.filePath);
+    }
+
+    // set lastModifed
+    for ( File file : difftimelist ) {
+      log.info("set lastModified "+file.filePath);
+    }
+
+    log.info("End Simulation "+srcStorage.storageName+" "+dstStorage.storageName);
   }
 
   // ======================================================================
@@ -187,7 +264,7 @@ public class Backuper
     return list;
   }
 
-  public static LinkedList<File> compare( LinkedList<File> frlist, LinkedList<File> tolist )
+  public static LinkedList<File> compare( LinkedList<File> frlist, LinkedList<File> tolist, LinkedList<File> difftimelist, long unit )
   {
     LinkedList<File> copylist = new LinkedList<>();
     ListIterator<File> fritr = frlist.listIterator();
@@ -200,6 +277,8 @@ public class Backuper
       if ( cmp == 0 ) {
 	if ( !frfile.hashValue.equals(tofile.hashValue) ) {
 	  copylist.add(frfile);
+	} else if ( frfile.lastModified/unit != tofile.lastModified/unit ) {
+	  difftimelist.add(frfile);
 	}
 	fritr.remove();
 	toitr.remove();

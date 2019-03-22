@@ -18,6 +18,7 @@ import java.util.Base64;
 import java.util.Comparator;
 import java.util.Date;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.ListIterator;
@@ -144,7 +145,7 @@ public class DataBase extends HashMap<String,DataBase.Storage> implements Closea
     }
 
     // --------------------------------------------------
-    public void copyFile( Path filePath, Storage dstStorage )
+    public void copyFile( Path filePath, Storage dstStorage, boolean override )
     throws IOException
     {
       log.trace("copyFile "+filePath);
@@ -155,11 +156,13 @@ public class DataBase extends HashMap<String,DataBase.Storage> implements Closea
       File   srcFile   = findFromList(srcFolder.files,filePath);
       Folder dstFolder = dstStorage.getFolder(parentPath);
       File   dstFile   = findFromList(dstFolder.files,filePath);
-      String command = "copy override ";
+      String command   = override ? "copy override " : "copy ";
       if ( dstFile == null ) {
+	if ( override ) throw new IOException("Override is requested, but the file is not existed : "+filePath );
 	dstFile = new File(filePath);
 	registerToList(dstFolder.files,dstFile);
-	command = "copy ";
+      } else {
+	if ( !override ) throw new IOException("Override is not requested, but the file is existed : "+filePath );
       }
       long unit = Math.max(srcStorage.timeUnit(),dstStorage.timeUnit());
       dstFile.hashValue = srcFile.hashValue;
@@ -177,27 +180,6 @@ public class DataBase extends HashMap<String,DataBase.Storage> implements Closea
 	  out.write(buf,0,len);
 	}
       }
-      dstStorage.setLastModified(dstFile.filePath,dstFile.lastModified);
-    }
-
-    public void setLastModified( Path filePath, Storage srcStorage )
-    throws IOException
-    {
-      Storage dstStorage = this;
-      Path parentPath = filePath.getParent();
-      if ( parentPath == null ) parentPath = Paths.get(".");
-      Folder srcFolder = findFromList(srcStorage.folders,parentPath);
-      File   srcFile   = findFromList(srcFolder.files,filePath);
-      Folder dstFolder = findFromList(dstStorage.folders,parentPath);
-      File   dstFile   = findFromList(dstFolder.files,filePath);
-
-      long unit = Math.max(srcStorage.timeUnit(),dstStorage.timeUnit());
-      log.trace(String.format("unit = %d, path = %s, src = %3$tF %3$tT.%3$tL, dst = %4$tF %4$tT.%4$tL",
-	  unit,filePath,srcFile.lastModified,dstFile.lastModified));
-      if ( dstFile.lastModified/unit == srcFile.lastModified/unit ) return;
-
-      log.info("set lastModified "+dstFile.filePath);
-      dstFile.lastModified = srcFile.lastModified/unit*unit;
       dstStorage.setLastModified(dstFile.filePath,dstFile.lastModified);
     }
 
@@ -230,7 +212,7 @@ public class DataBase extends HashMap<String,DataBase.Storage> implements Closea
       for ( ListIterator<Folder> itr = this.folders.listIterator(this.folders.size()); itr.hasPrevious(); ) {
 	Folder folder = itr.previous();
 	Path path = folder.folderPath;
-	if ( map.get(path) == 0 ) {
+	if ( map.get(path) == 0 && !path.equals(Paths.get(".")) ) {
 	  log.info("rmdir "+path);
 	  deleteRealFolder(path);
 	  itr.remove();
@@ -248,13 +230,22 @@ public class DataBase extends HashMap<String,DataBase.Storage> implements Closea
       folders = new LinkedList<Folder>();
       LinkedList<Folder> folderList = new LinkedList<>();
       folderList.add(new Folder(Paths.get(".")));
+      int counter = 0;
+      int lastcnt = 0;
+      long startTime = System.currentTimeMillis();
       while ( folderList.size() > 0 ) {
 	Folder folder = folderList.remove();
 	log.trace("new Folder "+folder.folderPath);
 	registerToList(folders,folder);
 	nextPath:
 	for ( PathHolder holder : getPathHolderList(folder.folderPath) ) {
+	  ++counter;
 	  Path relpath = holder.getPath();
+	  if ( (System.currentTimeMillis()-startTime) > 5000L ) {
+	    System.err.println(""+counter+" (+"+(counter-lastcnt)+") : "+relpath);
+	    startTime += 5000L;
+	    lastcnt = counter;
+	  }
 	  if ( holder instanceof Folder ) {
 	    log.trace("scan folder "+relpath);
 	    for ( Pattern pat : ignoreFolderPats ) {
@@ -297,6 +288,27 @@ public class DataBase extends HashMap<String,DataBase.Storage> implements Closea
 	    }
 	  }
 	}
+      }
+    }
+
+    public void complementFolders()
+    {
+      HashSet<Path> exists = new HashSet<>();
+      LinkedList<Folder> newFolders = new LinkedList<>();
+      for ( Folder folder : folders ) {
+	Path path = folder.folderPath;
+	while ( true ) {
+	  exists.add(path);
+	  path = path.getParent();
+	  if ( path == null || exists.contains(path) ) break;
+	  newFolders.add(new Folder(path));
+	}
+      }
+      if ( findFromList(folders,Paths.get(".")) == null )
+	newFolders.add(new Folder(Paths.get(".")));
+      for ( Folder folder : newFolders ) {
+	log.trace("complement folder : "+folder.folderPath);
+	registerToList(folders,folder);
       }
     }
 
