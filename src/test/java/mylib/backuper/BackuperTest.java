@@ -89,7 +89,7 @@ public class BackuperTest
     Date next = new Date(current.getTime()+3333L);
     createFiles(root,new Object[]{
 	"dic", new Object[]{
-	  DataBase.CONFIGNAME, new String[]{
+	  Backuper.CONFIGNAME, new String[]{
 	    "test.src="+srcdir.getAbsolutePath(),
 	    "a",
 	    "c1",
@@ -332,7 +332,7 @@ public class BackuperTest
     Date current = new Date(System.currentTimeMillis() - 10000L);
     createFiles(root,new Object[]{
 	"dic", new Object[]{
-	  DataBase.CONFIGNAME, new String[]{
+	  Backuper.CONFIGNAME, new String[]{
 	    "test.src="+srcdir.getAbsolutePath(),
 	    "test.dst="+dstdir.getAbsolutePath(),
 	  },
@@ -472,7 +472,7 @@ public class BackuperTest
     Date current = new Date(System.currentTimeMillis() - 10000L);
     createFiles(root,new Object[]{
 	"dic", new Object[]{
-	  DataBase.CONFIGNAME, new String[]{
+	  Backuper.CONFIGNAME, new String[]{
 	    "test.src="+srcdir.getAbsolutePath(),
 	    "test.dst="+dstdir.getAbsolutePath(),
 	  },
@@ -498,6 +498,7 @@ public class BackuperTest
       });
 
     try ( DataBase db = new DataBase(dbdir.toPath()) ) {
+      db.initializeByFile(dbdir.toPath().resolve(Backuper.CONFIGNAME));
       DataBase.Storage srcStorage = db.get("test.src");
       DataBase.Storage dstStorage = db.get("test.dst");
       Backuper.refresh(srcStorage);
@@ -505,11 +506,12 @@ public class BackuperTest
     }
 
     try ( DataBase db = new DataBase(dbdir.toPath()) ) {
-      Backuper.skipScan = true;
+      db.initializeByFile(dbdir.toPath().resolve(Backuper.CONFIGNAME));
+      Backuper.exCommand = Backuper.Command.BACKUP_SKIPSCAN;
       DataBase.Storage srcStorage = db.get("test.src");
       DataBase.Storage dstStorage = db.get("test.dst");
       Backuper.backup(srcStorage,dstStorage);
-      Backuper.skipScan = false;
+      Backuper.exCommand = Backuper.Command.BACKUP_OR_SCANONLY;
     }
 
     compareFiles(dstdir,new Object[]{
@@ -532,6 +534,7 @@ public class BackuperTest
   throws IOException
   {
     try ( DataBase db = new DataBase(dbdir.toPath()) ) {
+      db.initializeByFile(dbdir.toPath().resolve(Backuper.CONFIGNAME));
       DataBase.Storage srcStorage = db.get("test.src");
       DataBase.Storage dstStorage = db.get("test.dst");
       Backuper.backup(srcStorage,dstStorage);

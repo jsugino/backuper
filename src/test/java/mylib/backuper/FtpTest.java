@@ -67,7 +67,7 @@ public class FtpTest
 
     createFiles(root,new Object[]{
 	"dic", new Object[]{
-	  DataBase.CONFIGNAME, new String[]{
+	  Backuper.CONFIGNAME, new String[]{
 	    "test.src="+srcdir.getAbsolutePath(),
 	    "a",
 	    "c1",
@@ -305,7 +305,7 @@ public class FtpTest
 
     createFiles(root,new Object[]{
 	"dic", new Object[]{
-	  DataBase.CONFIGNAME, new String[]{
+	  Backuper.CONFIGNAME, new String[]{
 	    "test.src="+ftpurl,
 	    "a",
 	    "c1",
@@ -545,7 +545,7 @@ public class FtpTest
     File dbdir = new File(root,"dic");
     createFiles(root,new Object[]{
 	"dic", new Object[]{
-	  DataBase.CONFIGNAME, new String[]{
+	  Backuper.CONFIGNAME, new String[]{
 	    "test.dst="+ftpurl,
 	  },
 	},

@@ -38,8 +38,6 @@ public class FtpStorage extends Storage
   public String userid;
   public String password;
 
-  public HashSet<Path> createdFolders = new HashSet<>();
-
   public boolean connect()
   throws IOException
   {

@@ -1,0 +1,70 @@
+<database>
+  <folderdef id="stdfolders">
+    <folder dir="Linux/home/junsei" name="Linux.junsei"/>
+    <folder dir="Common" />
+    <folder dir="Virtual Machines" name="VMs" />
+  </folderdef>
+
+  <storage dir="/" name="SSD">
+    <folder dir="home/junsei" name="Linux.junsei">
+      <excludes>
+	/work/*/target/
+	#*#
+	*~
+      </excludes>
+    </folder>
+  </storage>
+
+  <storage dir="/mnt/C" name="C">
+    <folder dir="Users/junsei" />
+    <folder dir="BACKUP" name="">
+      <folder dir="Downloads/5.blog" name="blog">
+	<excludes>
+	  00.loader/
+	</excludes>
+      </folder>
+      <folder ref="stdfolders" />
+    </folder>
+  </storage>
+
+  <storage dir="/mnt/D" name="D">
+    <folder ref="stdfolders" />
+    <folder dir="Users/junsei"/>
+  </storage>
+
+  <storage dir="/run/media/junsei/HD-LBU3" name="G">
+    <folder ref="stdfolders" />
+    <folder dir="Users/junsei"/>
+  </storage>
+
+  <storage ftp="my.host.ne.jp" user="user" password="password" name="comb">
+    <folder dir="www/blog" name="blog">
+      <excludes>
+	.htaccess
+	.htpasswd
+      </excludes>
+    </folder>
+  </storage>
+
+  <backup ref="stdfolders">
+    <original storage="C" />
+    <copy level="daily" storage="D" />
+    <copy level="full" storage="G" />
+  </backup>
+  <backup name="Linux.junsei">
+    <original storage="STD" />
+    <copy level="daily" storage="C" />
+    <copy level="daily" storage="D" />
+    <copy level="full" storage="G" />
+  </backup>
+  <backup name="Users.junsei">
+    <original storage="C" />
+    <copy level="daily" storage="D" />
+    <copy level="full" storage="G" />
+  </backup>
+
+  <backup name="blog">
+    <original storage="C" />
+    <copy level="special" storage="comb" />
+  </backup>
+</database>

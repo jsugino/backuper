@@ -1,12 +1,13 @@
 [Backuper の使い方]
 
-java -jar jarfiile.jar [-ds] DicFolder SrcName [DstName]
+java -jar jarfiile.jar [-dsl] DicFolder [SrcName] [DstName]
 
 DicFolder : 辞書ファイルやログファイルの格納場所
 SrcName   : コピー元「識別名」を指定する。
 DstName   : コピー先「識別名」を指定する。
 -d        : デバッグモード。スキャンやコピーは行わず、DBの内容だけでcopy予定を表示する。
 -s	  : スキップスキャン。スキャンを省略する。
+-l	  : 定義ファイルの内容を出力する。
 
 ・DicFolder 以下の "folders.conf" ファイルに設定情報を記載する。
 ・DstName が省略されたら、SrcName に対応する辞書の更新のみを行う。

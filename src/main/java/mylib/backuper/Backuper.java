@@ -1,18 +1,18 @@
 package mylib.backuper;
 
 import java.io.IOException;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.Comparator;
-import java.util.Date;
 import java.util.LinkedList;
+import java.util.List;
 import java.util.ListIterator;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.slf4j.event.Level;
 
 import mylib.backuper.DataBase.File;
 import mylib.backuper.DataBase.Folder;
@@ -22,10 +22,15 @@ public class Backuper
 {
   private final static Logger log = LoggerFactory.getLogger(Backuper.class);
 
-  // execute options
-  static public boolean debugMode = false;
+  // execute commands
+  static enum Command {
+    BACKUP_OR_SCANONLY,
+    BACKUP_SKIPSCAN,
+    SIMULATE,
+    LISTDB
+  }
 
-  static public boolean skipScan = false;
+  public static Command exCommand = Command.BACKUP_OR_SCANONLY;
 
   public static class UsageException extends RuntimeException
   {
@@ -34,6 +39,9 @@ public class Backuper
     public UsageException( String message, Throwable cause ) { super(message,cause); }
     public UsageException( Throwable cause ) { super(cause); }
   }
+
+  public final static String CONFIGNAME = "folders.conf";
+  public final static String CONFIGXML  = "folders.conf.xml";
 
   public static void main( String argv[] )
   {
@@ -45,21 +53,47 @@ public class Backuper
     Path dbFolder = Paths.get(arg);
 
     try ( DataBase db = new DataBase(dbFolder) ) {
-      arg = getArg(args);
-      Storage srcStorage = db.get(arg);
-      if ( srcStorage == null ) throw new UsageException("Illegal Storage Name : "+arg);
-
-      arg = getArg(args,false);
-      if ( arg == null ) {
-	refresh(srcStorage);
+      if ( Files.isReadable(dbFolder.resolve(CONFIGXML)) ) {
+	db.initializeByXml(dbFolder.resolve(CONFIGXML));
+      } else if ( Files.isReadable(dbFolder.resolve(CONFIGNAME)) ) {
+	db.initializeByFile(dbFolder.resolve(CONFIGNAME));
       } else {
-	Storage dstStorage = db.get(arg);
-	if ( dstStorage == null ) throw new UsageException("Illegal Storage Name : "+arg);
-	if ( debugMode ) {
-	  simulate(srcStorage,dstStorage);
-	} else {
+	throw new UsageException("no definition file");
+      }
+      switch ( exCommand ) {
+      case BACKUP_OR_SCANONLY:
+	{
+	  Storage srcStorage = getStorage(db,args);
+	  Storage dstStorage = getStorage(db,args,false);
+	  if ( dstStorage == null ) {
+	    refresh(srcStorage);
+	  } else {
+	    backup(srcStorage,dstStorage);
+	  }
+	}
+	break;
+
+      case BACKUP_SKIPSCAN:
+	{
+	  Storage srcStorage = getStorage(db,args);
+	  Storage dstStorage = getStorage(db,args);
 	  backup(srcStorage,dstStorage);
 	}
+	break;
+
+      case SIMULATE:
+	{
+	  Storage srcStorage = getStorage(db,args);
+	  Storage dstStorage = getStorage(db,args);
+	  simulate(srcStorage,dstStorage);
+	}
+	break;
+
+      case LISTDB:
+	{
+	  listDB(db).stream().forEach(System.out::println);
+	}
+	break;
       }
     } catch ( UsageException ex ) {
       log.error(ex.getMessage(),ex);
@@ -71,6 +105,7 @@ public class Backuper
       System.err.println("  Option");
       System.err.println("    -s         : skip scan DB");
       System.err.println("    -d         : debug mode (no scan, no copy, no delete)");
+      System.err.println("    -l         : print all definition");
     } catch ( Exception ex ) {
       log.error(ex.getMessage(),ex);
     }
@@ -85,22 +120,48 @@ public class Backuper
   {
     String arg;
     while ( (arg = args.poll()) != null ) {
-      if ( !arg.startsWith("-") ) return arg;
-      for ( int i = 1; i < arg.length(); ++i ) {
-	switch ( arg.charAt(i) ) {
-	case 'd':
-	  debugMode = true;
-	  break;
-	case 's':
-	  skipScan = true;
-	  break;
-	default:
-	  throw new UsageException("Illegal Option : "+arg);
-	}
+      if ( !checkOpt(arg) ) {
+	if ( args.size() > 0 ) checkOpt(args.get(0));
+	return arg;
       }
     }
     if ( throwflag ) throw new UsageException("Not enough arguments");
     return null;
+  }
+
+  public static boolean checkOpt( String arg )
+  {
+    if ( !arg.startsWith("-") ) return false;
+    for ( int i = 1; i < arg.length(); ++i ) {
+      switch ( arg.charAt(i) ) {
+      case 'd':
+	exCommand = Command.SIMULATE;
+	break;
+      case 's':
+	exCommand = Command.BACKUP_SKIPSCAN;
+	break;
+      case 'l':
+	exCommand = Command.LISTDB;
+	break;
+      default:
+	throw new UsageException("Illegal Option : "+arg);
+      }
+    }
+    return true;
+  }
+
+  public static Storage getStorage( DataBase db, LinkedList<String> args )
+  {
+    return getStorage(db,args,true);
+  }
+
+  public static Storage getStorage( DataBase db, LinkedList<String> args, boolean throwflag )
+  {
+    String arg = getArg(args,throwflag);
+    if ( arg == null ) return null;
+    Storage storage = db.get(arg);
+    if ( throwflag && storage == null ) throw new UsageException("Illegal Storage Name : "+arg);
+    return storage;
   }
 
   public static void backup( Storage srcStorage, Storage dstStorage )
@@ -108,7 +169,7 @@ public class Backuper
   {
     log.info("Start Backup "+srcStorage.storageName+" "+dstStorage.storageName);
     srcStorage.readDB();
-    if ( skipScan ) {
+    if ( exCommand == Command.BACKUP_SKIPSCAN ) {
       srcStorage.complementFolders();
     } else {
       srcStorage.scanFolder();
@@ -116,7 +177,7 @@ public class Backuper
     }
 
     dstStorage.readDB();
-    if ( skipScan ) {
+    if ( exCommand == Command.BACKUP_SKIPSCAN ) {
       dstStorage.complementFolders();
     } else {
       dstStorage.scanFolder();
@@ -240,6 +301,17 @@ public class Backuper
     }
 
     log.info("End Simulation "+srcStorage.storageName+" "+dstStorage.storageName);
+  }
+
+  public static List<String> listDB( DataBase db )
+  {
+    String keys[] = db.keySet().toArray(new String[0]);
+    Arrays.sort(keys);
+    LinkedList<String> list = new LinkedList<>();
+    for ( String key : keys ) {
+      list.add(key+'='+db.get(key).getRoot());
+    }
+    return list;
   }
 
   // ======================================================================

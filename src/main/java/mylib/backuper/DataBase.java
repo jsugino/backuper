@@ -1,10 +1,13 @@
 package mylib.backuper;
 
+import java.io.BufferedReader;
 import java.io.Closeable;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.io.PrintStream;
+import java.io.StringReader;
+import java.io.StringWriter;
 import java.nio.file.Files;
 import java.nio.file.NoSuchFileException;
 import java.nio.file.Path;
@@ -13,19 +16,34 @@ import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.text.ParseException;
 import java.text.SimpleDateFormat;
-import java.util.Arrays;
 import java.util.Base64;
-import java.util.Comparator;
 import java.util.Date;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.ListIterator;
+import java.util.function.BiConsumer;
+import java.util.function.BiFunction;
 import java.util.regex.Pattern;
+
+import javax.xml.parsers.DocumentBuilderFactory;
+import javax.xml.parsers.ParserConfigurationException;
+import javax.xml.transform.OutputKeys;
+import javax.xml.transform.Transformer;
+import javax.xml.transform.TransformerException;
+import javax.xml.transform.TransformerFactory;
+import javax.xml.transform.dom.DOMSource;
+import javax.xml.transform.stream.StreamResult;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.w3c.dom.Attr;
+import org.w3c.dom.Document;
+import org.w3c.dom.Element;
+import org.w3c.dom.Node;
+import org.w3c.dom.NodeList;
+import org.xml.sax.SAXException;
 
 public class DataBase extends HashMap<String,DataBase.Storage> implements Closeable
 {
@@ -37,6 +55,7 @@ public class DataBase extends HashMap<String,DataBase.Storage> implements Closea
   // ======================================================================
   public abstract class Storage implements Closeable
   {
+    public String driveName;
     public String storageName;
     public LinkedList<Folder> folders = null;		// 全てのフォルダのリスト
     public LinkedList<Pattern> ignoreFilePats = new LinkedList<>();
@@ -80,6 +99,37 @@ public class DataBase extends HashMap<String,DataBase.Storage> implements Closea
 	makeDirectory(path);
       }
       return folder;
+    }
+
+    public void addIgnore( String line )
+    {
+      line = line.trim();
+      if ( line.length() == 0 ) return;
+      if ( line.charAt(line.length()-1) == '/' ) {
+	line = line.substring(0,line.length()-1);
+	line = line.replaceAll("\\.","\\\\.");
+	line = line.replaceAll("\\*\\*",".+");
+	line = line.replaceAll("\\*","[^/]+");
+	if ( line.charAt(0) == '/' ) {
+	  line = line.substring(1);
+	} else {
+	  line = "(.+/)?"+line;
+	}
+	Pattern pat = Pattern.compile(line);
+	log.trace("ignore folder pattern : "+pat);
+	this.ignoreFolderPats.add(pat);
+      } else {
+	line = line.replaceAll("\\.","\\\\.");
+	line = line.replaceAll("\\*","[^/]+");
+	if ( line.charAt(0) == '/' ) {
+	  line = line.substring(1);
+	} else {
+	  line = "(.+/)?"+line;
+	}
+	Pattern pat = Pattern.compile(line);
+	log.trace("ignore file pattern : "+pat);
+	this.ignoreFilePats.add(pat);
+      }
     }
 
     // --------------------------------------------------
@@ -442,72 +492,209 @@ public class DataBase extends HashMap<String,DataBase.Storage> implements Closea
   }
 
   // ======================================================================
-  public final static String CONFIGNAME = "folders.conf";
-
   public Path dbFolder;
   public MessageDigest digest;
 
   public DataBase( Path dbFolder )
+  throws IOException
   {
     this.dbFolder = dbFolder;
-    log.trace("Initialize DataBase "+dbFolder+'/'+CONFIGNAME);
-
     try {
-      try {
-	digest = MessageDigest.getInstance("MD5");
-      } catch ( NoSuchAlgorithmException ex ) {
-	throw new IOException("Cannot initialize 'digest MD5'",ex);
-      }
-      Storage storage = null;
-      for ( String line : Files.readAllLines(dbFolder.resolve(CONFIGNAME)) ) {
-	if ( line.length() == 0 || line.startsWith("##") ) return;
-	int idx = line.indexOf('=');
-	if ( idx <= 0 ) {
-	  if ( line.charAt(line.length()-1) == '/' ) {
-	    line = line.substring(0,line.length()-1);
-	    line = line.replaceAll("\\.","\\\\.");
-	    line = line.replaceAll("\\*\\*",".+");
-	    line = line.replaceAll("\\*","[^/]+");
-	    if ( line.charAt(0) == '/' ) {
-	      line = line.substring(1);
-	    } else {
-	      line = "(.+/)?"+line;
-	    }
-	    Pattern pat = Pattern.compile(line);
-	    log.trace("ignore folder pattern : "+pat);
-	    storage.ignoreFolderPats.add(pat);
-	  } else {
-	    line = line.replaceAll("\\.","\\\\.");
-	    line = line.replaceAll("\\*","[^/]+");
-	    if ( line.charAt(0) == '/' ) {
-	      line = line.substring(1);
-	    } else {
-	      line = "(.+/)?"+line;
-	    }
-	    Pattern pat = Pattern.compile(line);
-	    log.trace("ignore file pattern : "+pat);
-	    storage.ignoreFilePats.add(pat);
-	  }
-	  continue;
-	}
-	String key = line.substring(0,idx).trim();
-	String defstr = line.substring(idx+1).trim();
-	if ( defstr.startsWith("ftp://") ) {
-	  storage = new FtpStorage(this,key,defstr);
-	} else {
-	  Path path = Paths.get(defstr);
-	  if ( !path.isAbsolute() ) {
-	    log.error("Not Absolute Path : "+line);
-	    return;
-	  }
-	  storage = new LocalStorage(this,key,path);
-	}
-	this.put(storage.storageName,storage);
-	log.trace("Read Config "+key+"="+defstr);
-      }
-    } catch ( IOException ex ) {
-      log.error(ex.getMessage(),ex);
+      digest = MessageDigest.getInstance("MD5");
+    } catch ( NoSuchAlgorithmException ex ) {
+      throw new IOException("Cannot initialize 'digest MD5'",ex);
     }
+  }
+
+  public void initializeByFile( Path descFilePath )
+  throws IOException
+  {
+    log.trace("initializeByFile : "+descFilePath);
+
+    Storage storage = null;
+    for ( String line : Files.readAllLines(descFilePath) ) {
+      if ( line.length() == 0 || line.startsWith("##") ) return;
+      int idx = line.indexOf('=');
+      if ( idx <= 0 ) { storage.addIgnore(line); continue; }
+      String key = line.substring(0,idx).trim();
+      String defstr = line.substring(idx+1).trim();
+      if ( defstr.startsWith("ftp://") ) {
+	storage = new FtpStorage(this,key,defstr);
+      } else {
+	Path path = Paths.get(defstr);
+	if ( !path.isAbsolute() ) {
+	  log.error("Not Absolute Path : "+line);
+	  return;
+	}
+	storage = new LocalStorage(this,key,path);
+      }
+      this.put(storage.storageName,storage);
+      log.trace("Read Config "+key+"="+defstr);
+    }
+  }
+
+  public void initializeByXml( Path descFilePath )
+  throws IOException
+  {
+    try {
+      log.trace("initializeByXml : "+descFilePath);
+
+      HashMap<String,String[]> folderdefMap = new HashMap<>();
+
+      Document xmldoc = DocumentBuilderFactory.newInstance().newDocumentBuilder().parse(descFilePath.toFile());
+      NodeList children = xmldoc.getChildNodes().item(0).getChildNodes();
+      for ( int i = 0; i < children.getLength(); ++i ) {
+	Element elem = selectElement(children.item(i));
+	if ( elem == null ) continue;
+	String tagname = elem.getTagName();
+	if ( tagname.equals("folderdef") ) {
+	  String id = getAttr(elem,"id");
+	  log.trace("find folderdef : id = "+id);
+	  if ( id == null ) { nodeerror("no id for folderdef",elem); continue; }
+	  NodeList deflist = elem.getChildNodes();
+	  LinkedList<String> list = new LinkedList<>();
+	  for ( int j = 0; j < deflist.getLength(); ++j ) {
+	    Element folder = selectElement(deflist.item(j));
+	    if ( folder == null ) continue;
+	    if ( !folder.getTagName().equals("folder") ) { unknown(folder); continue; }
+	    String dir = getAttr(folder,"dir");
+	    if ( dir == null ) { attrerror("dir",folder); continue; }
+	    String name = getAttr(folder,"name");
+	    if ( name == null ) name = dir.replace('/','.');
+	    list.add(dir);
+	    list.add(name);
+	  }
+	  folderdefMap.put(id,list.toArray(new String[0]));
+	} else if ( tagname.equals("storage") ) {
+	  log.trace("storage = "+serialize(elem));
+	  if ( elem.getAttributeNode("ftp") != null ) {
+	    String userid = getAttr(elem,"user");
+	    if ( userid == null ) { attrerror("user",elem); continue; }
+	    String password = getAttr(elem,"password");
+	    if ( password == null ) { attrerror("password",elem); continue; }
+	    String hostname = getAttr(elem,"ftp");
+	    if ( hostname == null ) { attrerror("ftp",elem); continue; }
+	    String name = getAttr(elem,"name");
+	    if ( name == null ) { attrerror("name",elem); continue; }
+	    parseFolders(elem.getChildNodes(),name,"","",folderdefMap,null,(n,p)->
+	      new FtpStorage(this,n,userid,password,hostname,p.toString()));
+	  } else {
+	    String dir = getAttr(elem,"dir");
+	    if ( dir == null || dir.length() == 0 ) { attrerror("dir",elem); continue; }
+	    String name = getAttr(elem,"name");
+	    if ( name == null || name.length() == 0 ) { attrerror("name",elem); continue; }
+	    log.trace(name+'='+dir);
+	    if ( dir.charAt(dir.length()-1) != '/' ) dir = dir+'/';
+	    parseFolders(elem.getChildNodes(),name,dir,"",folderdefMap,null,(n,p)->new LocalStorage(this,n,p));
+	  }
+	} else if ( tagname.equals("backup") ) {
+	} else {
+	  unknown(elem);
+	}
+      }
+    } catch ( ParserConfigurationException | SAXException | TransformerException ex ) {
+      log.error(ex.getMessage(),ex);
+      throw new IOException(ex.getMessage(),ex);
+    }
+  }
+
+  public void parseFolders(
+    NodeList list, String driveName, String parentDir, String parentName,
+    HashMap<String,String[]> folderdefMap, Storage curentStorage, BiFunction<String,Path,Storage> newFunc
+  )
+  throws IOException, TransformerException
+  {
+    for ( int i = 0; i < list.getLength(); ++i ) {
+      Element folder = selectElement(list.item(i));
+      if ( folder == null ) continue;
+      if ( folder.getTagName().equals("excludes") ) {
+	BufferedReader in = new BufferedReader(new StringReader(folder.getTextContent()));
+	String line;
+	while ( (line = in.readLine()) != null ) curentStorage.addIgnore(line);
+	in.close();
+	continue;
+      }
+      if ( !folder.getTagName().equals("folder") ) { unknown(folder); continue; }
+      log.trace("folder = "+serialize(folder));
+      if ( folder.getAttributeNode("ref") != null ) {
+	String defs[] = folderdefMap.get(getAttr(folder,"ref"));
+	if ( defs == null ) { nodeerror("No reference",folder); continue; }
+	for ( int j = 0; j < defs.length; j += 2 ) {
+	  String strName = parentName+defs[j+1]+'.'+driveName;
+	  this.put(strName,newFunc.apply(strName,Paths.get(parentDir+defs[j])));
+	  //this.put(strName,new LocalStorage(this,strName,Paths.get(parentDir+defs[j])));
+	}
+	if ( folder.getChildNodes().getLength() > 0 )
+	  log.error("Ignore sub nodes : "+serialize(folder));
+      } else {
+	String dir = getAttr(folder,"dir");
+	if ( dir == null ) { attrerror("dir",folder); continue; }
+	String name = getAttr(folder,"name");
+	if ( name == null ) name = dir.replace('/','.');
+	log.trace("parentName = "+parentName+", name = "+name
+	  +", driveName = "+driveName
+	  +", parentDir = "+parentDir+", dir = "+dir);
+	String newName = parentName+name;
+	String newDir = parentDir+dir;
+	Storage storage = null;
+	if ( name.length() > 0 ) {
+	  newName = newName+'.';
+	  String strName = newName+driveName;
+	  //storage = new LocalStorage(this,strName,Paths.get(newDir));
+	  storage = newFunc.apply(strName,Paths.get(newDir));
+	  this.put(strName,storage);
+	}
+	parseFolders(folder.getChildNodes(),driveName,newDir+'/',newName,folderdefMap,storage,newFunc);
+      }
+    }
+  }
+
+  public static String getAttr( Element elem, String attrName )
+  {
+    Attr attr = elem.getAttributeNode(attrName);
+    return attr == null ? null : attr.getValue();
+  }
+
+  public static void attrerror( String attr, Node node )
+  throws IOException, TransformerException
+  {
+    nodeerror("no attribute '"+attr+"'",node);
+  }
+
+  public static void unknown( Node node )
+  throws IOException, TransformerException
+  {
+    nodeerror("unknown XML element",node);
+  }
+
+  public static void nodeerror( String message, Node node )
+  throws IOException, TransformerException
+  {
+    log.error(message+" : "+serialize(node));
+    new Exception(message).printStackTrace();
+  }
+
+  public static Element selectElement( Node node )
+  throws IOException, TransformerException
+  {
+    switch (node.getNodeType()) {
+    case Node.ELEMENT_NODE:
+      log.trace("find Element : "+serialize(node));
+      return (Element)node;
+    case Node.TEXT_NODE: break;
+    default: unknown(node); break;
+    }
+    return null;
+  }
+
+  public static String serialize( Node node )
+  throws IOException, TransformerException
+  {
+    Transformer tf = TransformerFactory.newInstance().newTransformer();
+    tf.setOutputProperty(OutputKeys.OMIT_XML_DECLARATION,"yes");
+    StringWriter out = new StringWriter();
+    tf.transform(new DOMSource(node.cloneNode(false)), new StreamResult(out));
+    return out.toString();
   }
 
   @Override
