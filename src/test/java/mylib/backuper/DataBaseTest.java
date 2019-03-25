@@ -235,6 +235,27 @@ public class DataBaseTest
       assertEquals(0,storage.ignoreFilePats.size());
       assertEquals(0,storage.ignoreFolderPats.size());
 
+      storage = db.remove("Users.history.junsei.D");
+      assertEquals(LocalStorage.class,storage.getClass());
+      local = (LocalStorage)storage;
+      assertEquals(Paths.get("/mnt/D/Users.history/junsei"),local.rootFolder);
+      assertEquals(0,storage.ignoreFilePats.size());
+      assertEquals(0,storage.ignoreFolderPats.size());
+
+      storage = db.remove("Users.history.D");
+      assertEquals(LocalStorage.class,storage.getClass());
+      local = (LocalStorage)storage;
+      assertEquals(Paths.get("/mnt/D/Users.history"),local.rootFolder);
+      assertEquals(0,storage.ignoreFilePats.size());
+      assertEquals(0,storage.ignoreFolderPats.size());
+
+      storage = db.remove("Users.history.G");
+      assertEquals(LocalStorage.class,storage.getClass());
+      local = (LocalStorage)storage;
+      assertEquals(Paths.get("/run/media/junsei/HD-LBU3/Users.history"),local.rootFolder);
+      assertEquals(0,storage.ignoreFilePats.size());
+      assertEquals(0,storage.ignoreFolderPats.size());
+
       storage = db.remove("Common.C");
       assertEquals(LocalStorage.class,storage.getClass());
       local = (LocalStorage)storage;
@@ -301,6 +322,9 @@ public class DataBaseTest
       assertEquals("Linux.junsei.D=/mnt/D/Linux/home/junsei",itr.next());
       assertEquals("Linux.junsei.G=/run/media/junsei/HD-LBU3/Linux/home/junsei",itr.next());
       assertEquals("Linux.junsei.SSD=/home/junsei",itr.next());
+      assertEquals("Users.history.D=/mnt/D/Users.history",itr.next());
+      assertEquals("Users.history.G=/run/media/junsei/HD-LBU3/Users.history",itr.next());
+      assertEquals("Users.history.junsei.D=/mnt/D/Users.history/junsei",itr.next());
       assertEquals("Users.junsei.C=/mnt/C/Users/junsei",itr.next());
       assertEquals("Users.junsei.D=/mnt/D/Users/junsei",itr.next());
       assertEquals("Users.junsei.G=/run/media/junsei/HD-LBU3/Users/junsei",itr.next());

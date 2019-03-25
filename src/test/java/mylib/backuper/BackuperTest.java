@@ -77,6 +77,7 @@ public class BackuperTest
   // ----------------------------------------------------------------------
   // Backuper のテスト
 
+  // 一般的なコピーのテスト
   @Test
   public void testSimple()
   throws IOException
@@ -321,6 +322,7 @@ public class BackuperTest
       });
   }
 
+  // 同じ名前で、コピー元のディレクトリとコピー先ファイルがある場合のテスト
   @Test
   public void testSame()
   throws Exception
@@ -461,6 +463,7 @@ public class BackuperTest
       });
   }
 
+  // ルートディレクトリにファイルがない場合、Scanせずにコピー実行した場合。
   @Test
   public void testNoRoot()
   throws Exception
@@ -527,14 +530,650 @@ public class BackuperTest
       });
   }
 
+  // 長さが異なる場合。
+  @Test
+  public void testLength()
+  throws Exception
+  {
+    File root = tempdir.getRoot();
+    File dbdir = new File(root,"dic");
+    File srcdir = new File(root,"src");
+    File dstdir = new File(root,"dst");
+    Date current = new Date(System.currentTimeMillis() - 10000L);
+
+    createFiles(root,new Object[]{
+	"dic", new Object[]{
+	  Backuper.CONFIGNAME, new String[]{
+	    "test.src="+srcdir.getAbsolutePath(),
+	    "test.dst="+dstdir.getAbsolutePath(),
+	  },
+	},
+	"src", new Object[]{
+	  "1", "1", current,
+	  "2", "22", current,
+	  "3", "333", current,
+	},
+	"dst", new Object[]{
+	  "1", "1", current,
+	  "2", "222", current,
+	  "3", "333", current,
+	},
+      });
+
+    DataBase db = execute(root,dbdir);
+
+    compareFiles(dstdir,new Object[]{
+	"1", "1", current,
+	"2", "22", current,
+	"3", "333", current,
+      });
+
+    checkEvent(new Object[]{
+	"Compare Files test.src test.dst", new String[]{
+	  "copy override 2",
+	},
+	"Write DataBase test.dst "+dbdir+"/test.dst.db",
+      });
+  }
+
+  final long min = 60000L;
+
+  // ディレクトリ内のファイル移動があった場合のテスト：単純コピー。
+  @Test
+  public void testMove()
+  throws Exception
+  {
+    File root = tempdir.getRoot();
+    File dbdir = new File(root,"dic");
+    File srcdir = new File(root,"src");
+    File dstdir = new File(root,"dst");
+    Long current = System.currentTimeMillis() - 10000L;
+
+    // prepareMove()
+    createFiles(root,new Object[]{
+	"dic", new Object[]{
+	  Backuper.CONFIGNAME, new String[]{
+	    "test.src="+srcdir.getAbsolutePath(),
+	    "test.dst="+dstdir.getAbsolutePath(),
+	  },
+	},
+	"src", new Object[]{
+	  "1", new Object[]{
+	    "1", "data 11", current,
+	    "2", "data 2222", current,
+	    "3", "data 333333", current,
+	  },
+	},
+	"dst", new Object[]{
+	  "2", new Object[]{
+	    "1", "data 11", current, // 内容も時刻も同じ
+	    "2", "data 1212", current, // 時刻は同じだが、内容は異なる
+	    "3", "data 333333", current+1*min, // 時刻は違うが、内容は同じ
+	  },
+	  "3", new Object[]{
+	    "0", "", current+2*min,
+	  },
+	},
+      });
+
+    DataBase db = execute(root,dbdir);
+
+    compareFiles(dstdir,new Object[]{
+	"1", new Object[]{
+	  "1", "data 11", current,
+	  "2", "data 2222", current,
+	  "3", "data 333333", current,
+	},
+      });
+
+    checkEvent(new Object[]{
+	"Compare Files test.src test.dst", new String[]{
+	  // 今は、次のようになってしまう。
+	  "mkdir 1",
+	  "copy 1/1",
+	  "copy 1/2",
+	  "copy 1/3",
+	  "delete 2/1",
+	  "delete 2/2",
+	  "delete 2/3",
+	  "rmdir 2",
+	  "delete 3/0",
+	  "rmdir 3",
+	  // ToDo: 本来は、次のようになるべき。
+	  /*
+	  "mkdir 1",
+	  "move 2/1 1/1",
+	  "delete 2/2",
+	  "copy 1/2",
+	  "move 2/3 1/3",
+	  "set lastModified 1/3",
+	  */
+	},
+	"Write DataBase test.dst "+dbdir+"/test.dst.db",
+      });
+  }
+
+  @Test
+  public void testBackup1()
+  throws Exception
+  {
+    File root = tempdir.getRoot();
+    File dbdir = new File(root,"dic");
+    File srcdir = new File(root,"src");
+    File dstdir = new File(root,"dst");
+    File histdir = new File(root,"hist");
+    long current = System.currentTimeMillis() - 10000L;
+
+    // prepareSimple()
+    createFiles(root,new Object[]{
+	"dic", new Object[]{
+	  Backuper.CONFIGNAME, new String[]{
+	    "test.src="+srcdir.getAbsolutePath(),
+	    "test.dst="+dstdir.getAbsolutePath(),
+	  },
+	},
+	"src", new Object[]{
+	  "1", "", current,
+	  "2", "", current,
+	  "4", new Object[]{
+	    "1", "", current,
+	  },
+	  "5", "", current,
+	  "6", new Object[]{
+	    "1", "", current,
+	    "2", "abc", current,
+	  },
+	},
+	"dst", new Object[]{
+	  "2", "", current,
+	  "3", "", current+1*min,
+	  "4", "", current+2*min,
+	  "5", new Object[]{
+	    "1", "", current+3*min,
+	  },
+	  "6", new Object[]{
+	    "2", "def", current+4*min,
+	    "3", "", current+5*min,
+	  },
+	},
+      });
+    DataBase db = execute(root,dbdir);
+
+    compareFiles(dstdir,new Object[]{
+	"1", "", current,
+	"2", "", current,
+	"4", new Object[]{
+	  "1", "", current,
+	},
+	"5", "", current,
+	"6", new Object[]{
+	  "1", "", current,
+	  "2", "abc", current,
+	},
+      });
+
+    // ToDo: 本来、次のは成功するはず。
+    /*
+    compareFiles(histdir,new Object[]{
+	"3-hist", "", current+1*min,
+	"4-hist", "", current+2*min,
+	"5", new Object[]{
+	  "1-hist", "", current,
+	},
+	"6", new Object[]{
+	  "2-hist", "def", current,
+	  "3-hist", "", current,
+	},
+      });
+    */
+
+    checkEvent(new Object[]{
+	"Compare Files test.src test.dst",new String[]{
+	  // ToDo: 今は、次のようになってしまう。履歴の保存時のアクションも追加する必要がある。
+	  "copy 1",
+	  "delete 3",
+	  "delete 4",
+	  "mkdir 4",
+	  "copy 4/1",
+	  "delete 5/1",
+	  "rmdir 5",
+	  "copy 5",
+	  "copy 6/1",
+	  "copy override 6/2",
+	  "delete 6/3",
+	},
+	"Write DataBase test.dst "+dbdir+"/test.dst.db",
+      });
+  }
+
+  @Test
+  public void testBackup2()
+  throws Exception
+  {
+    File root = tempdir.getRoot();
+    File dbdir = new File(root,"dic");
+    File srcdir = new File(root,"src");
+    File dstdir = new File(root,"dst");
+    File histdir = new File(root,"hist");
+    long current = System.currentTimeMillis()/min*min - 3*min;
+
+    // prepareMove()
+    createFiles(root,new Object[]{
+	"dic", new Object[]{
+	  Backuper.CONFIGXML, new String[]{
+	    "<database>",
+	    "  <storage dir=\""+tempdir.getRoot()+"\" name=\"src\">",
+	    "    <folder dir=\"src\" name=\"test\"/>",
+	    "  </storage>",
+	    "  <storage dir=\""+tempdir.getRoot()+"\" name=\"dst\">",
+	    "    <folder dir=\"dst\" name=\"test\"/>",
+	    "  </storage>",
+	    "</database>",
+	  },
+	},
+	"src", new Object[]{
+	  "1", new Object[]{
+	    "1", "data 11", current,
+	    "2", "data 2222", current,
+	    "3", "data 333333", current,
+	  },
+	},
+	"dst", new Object[]{
+	  "2", new Object[]{
+	    "1", "data 11", current, // 内容も時刻も同じ
+	    "2", "data 1212", current, // 時刻は同じだが、内容は異なる
+	    "3", "data 333333", current+1*min, // 時刻は違うが、内容は同じ
+	  },
+	  "3", new Object[]{
+	    "0", "", current+2*min,
+	  },
+	},
+      });
+
+    DataBase db = execute(root,dbdir,true);
+
+    compareFiles(dstdir,new Object[]{
+	"1", new Object[] {
+	  "1", "data 11",
+	  "2", "data 2222",
+	  "3", "data 333333",
+	},
+      });
+
+    /* ToDo: 次のものもできるようにする。
+    compareFiles(histdir,new Object[]{
+	"2", new Object[]{
+	  "2-hist", "data 1212",
+	  "3-hist", "data 333333",
+	},
+	"3", new Object[]{
+	  "0-hist", "",
+	},
+      });
+    */
+  }
+
+  @Test
+  public void testBackup3()
+  throws Exception
+  {
+    File root = tempdir.getRoot();
+    File dbdir = new File(root,"dic");
+    File srcdir = new File(root,"src");
+    File dstdir = new File(root,"dst");
+    File histdir = new File(root,"hist");
+    long current = System.currentTimeMillis()/min*min - 3*min;
+
+    createFiles(root,new Object[]{
+	"dic", new Object[]{
+	  Backuper.CONFIGXML, new String[]{
+	    "<database>",
+	    "  <storage dir=\""+tempdir.getRoot()+"\" name=\"src\">",
+	    "    <folder dir=\"src\" name=\"test\"/>",
+	    "  </storage>",
+	    "  <storage dir=\""+tempdir.getRoot()+"\" name=\"dst\">",
+	    "    <folder dir=\"dst\" name=\"test\"/>",
+	    "  </storage>",
+	    "</database>",
+	  },
+	},
+	"src", new Object[]{
+	  "1.ext", "a/1.ext", current,
+	},
+	"dst", new Object[]{
+	  "abc", "", current+1*min,
+	  "def.ext", "", current+2*min,
+	  "gh.ext.ext", "", current+3*min,
+	  ".ijk", "", current+4*min,
+	  ".lmn.ext", "", current+5*min,
+	},
+	"c", new Object[]{},
+      });
+
+    DataBase db = execute(root,dbdir,true);
+
+    compareFiles(dstdir,new Object[]{
+	"1.ext", "a/1.ext",
+      });
+    /* ToDo : 次のものも成功させる。
+    compareFiles(histdir,new String[][]{
+	"abc-hist", "",
+	"def-hist.ext", "",
+	"gh.ext-hist.ext", "",
+	".ijk-hist", "",
+	".lmn-hist.ext", "",
+      });
+    */
+  }
+
+  @Test
+  public void testReject()
+  throws Exception
+  {
+    File root = tempdir.getRoot();
+    File dbdir = new File(root,"dic");
+    File srcdir = new File(root,"src");
+    long current = System.currentTimeMillis() - 10000L;
+
+    createFiles(root,new Object[]{
+	"src", new Object[]{
+	  "dirx", new Object[]{
+	    "fileax1", "data ax1", current,
+	    "fileax2", "data ax2", current,
+	    "diry", new Object[]{
+	      "fileaxy1", "data axy1", current,
+	      "fileaxy2", "data axy2", current,
+	    },
+	  },
+	  "diry", new Object[]{
+	    "fileay1", "data ay1", current,
+	    "fileay2", "data ay2", current,
+	  },
+	  "dirz", new Object[]{
+	    "fileaz1", "data az1", current,
+	    "fileaz2", "data az2", current,
+	    "dirx", new Object[]{
+	      "fileazx1", "data azx1", current,
+	      "fileazx2", "data azx2", current,
+	      "dirx", new Object[]{
+		"fileazxx1", "data azxx1", current,
+		"fileazxx2", "data azxx2", current,
+		"diry", new Object[]{
+		  "fileazxxy1", "data azxxy1", current,
+		  "fileazxxy2", "data azxxy2", current,
+		},
+	      },
+	    },
+	  },
+	},
+      });
+
+    // --------------------
+    createFiles(root,new Object[]{
+	"dic", new Object[]{
+	  Backuper.CONFIGNAME, new String[]{
+	    "test.src="+srcdir.getAbsolutePath(),
+	  },
+	},
+      });
+
+    try ( DataBase db = new DataBase(dbdir.toPath()) ) {
+      db.initializeByFile(dbdir.toPath().resolve(Backuper.CONFIGNAME));
+      DataBase.Storage storage = db.get("test.src");
+      storage.scanFolder();
+      checkContents(storage::dump, new String[]{
+	  ".	*",
+	  "dirx	*",
+	  "*	fileax1",
+	  "*	fileax2",
+	  "dirx/diry	*",
+	  "*	fileaxy1",
+	  "*	fileaxy2",
+	  "diry	*",
+	  "*	fileay1",
+	  "*	fileay2",
+	  "dirz	*",
+	  "*	fileaz1",
+	  "*	fileaz2",
+	  "dirz/dirx	*",
+	  "*	fileazx1",
+	  "*	fileazx2",
+	  "dirz/dirx/dirx	*",
+	  "*	fileazxx1",
+	  "*	fileazxx2",
+	  "dirz/dirx/dirx/diry	*",
+	  "*	fileazxxy1",
+	  "*	fileazxxy2",
+	});
+    }
+
+    // --------------------
+    createFiles(root,new Object[]{
+	"dic", new Object[]{
+	  Backuper.CONFIGNAME, new String[]{
+	    "test.src="+srcdir.getAbsolutePath(),
+	    "/diry/",
+	  },
+	},
+      });
+
+    try ( DataBase db = new DataBase(dbdir.toPath()) ) {
+      db.initializeByFile(dbdir.toPath().resolve(Backuper.CONFIGNAME));
+      DataBase.Storage storage = db.get("test.src");
+      storage.scanFolder();
+      checkContents(storage::dump, new String[]{
+	  ".	*",
+	  "dirx	*",
+	  "*	fileax1",
+	  "*	fileax2",
+	  "dirx/diry	*",
+	  "*	fileaxy1",
+	  "*	fileaxy2",
+	  //"diry	*",
+	  //"*	fileay1",
+	  //"*	fileay2",
+	  "dirz	*",
+	  "*	fileaz1",
+	  "*	fileaz2",
+	  "dirz/dirx	*",
+	  "*	fileazx1",
+	  "*	fileazx2",
+	  "dirz/dirx/dirx	*",
+	  "*	fileazxx1",
+	  "*	fileazxx2",
+	  "dirz/dirx/dirx/diry	*",
+	  "*	fileazxxy1",
+	  "*	fileazxxy2",
+	});
+    }
+
+    // --------------------
+    createFiles(root,new Object[]{
+	"dic", new Object[]{
+	  Backuper.CONFIGNAME, new String[]{
+	    "test.src="+srcdir.getAbsolutePath(),
+	    "/dirx/diry/",
+	  },
+	},
+      });
+
+    try ( DataBase db = new DataBase(dbdir.toPath()) ) {
+      db.initializeByFile(dbdir.toPath().resolve(Backuper.CONFIGNAME));
+      DataBase.Storage storage = db.get("test.src");
+      storage.scanFolder();
+      checkContents(storage::dump, new String[]{
+	  ".	*",
+	  "dirx	*",
+	  "*	fileax1",
+	  "*	fileax2",
+	  //"dirx/diry	*",
+	  //"*	fileaxy1",
+	  //"*	fileaxy2",
+	  "diry	*",
+	  "*	fileay1",
+	  "*	fileay2",
+	  "dirz	*",
+	  "*	fileaz1",
+	  "*	fileaz2",
+	  "dirz/dirx	*",
+	  "*	fileazx1",
+	  "*	fileazx2",
+	  "dirz/dirx/dirx	*",
+	  "*	fileazxx1",
+	  "*	fileazxx2",
+	  "dirz/dirx/dirx/diry	*",
+	  "*	fileazxxy1",
+	  "*	fileazxxy2",
+	});
+    }
+
+    // --------------------
+    createFiles(root,new Object[]{
+	"dic", new Object[]{
+	  Backuper.CONFIGNAME, new String[]{
+	    "test.src="+srcdir.getAbsolutePath(),
+	    "diry/",
+	  },
+	},
+      });
+
+    try ( DataBase db = new DataBase(dbdir.toPath()) ) {
+      db.initializeByFile(dbdir.toPath().resolve(Backuper.CONFIGNAME));
+      DataBase.Storage storage = db.get("test.src");
+      storage.scanFolder();
+      checkContents(storage::dump, new String[]{
+	  ".	*",
+	  "dirx	*",
+	  "*	fileax1",
+	  "*	fileax2",
+	  //"dirx/diry	*",
+	  //"*	fileaxy1",
+	  //"*	fileaxy2",
+	  //"diry	*",
+	  //"*	fileay1",
+	  //"*	fileay2",
+	  "dirz	*",
+	  "*	fileaz1",
+	  "*	fileaz2",
+	  "dirz/dirx	*",
+	  "*	fileazx1",
+	  "*	fileazx2",
+	  "dirz/dirx/dirx	*",
+	  "*	fileazxx1",
+	  "*	fileazxx2",
+	  //"dirz/dirx/dirx/diry	*",
+	  //"*	fileazxxy1",
+	  //"*	fileazxxy2",
+	});
+    }
+
+    // --------------------
+    createFiles(root,new Object[]{
+	"dic", new Object[]{
+	  Backuper.CONFIGNAME, new String[]{
+	    "test.src="+srcdir.getAbsolutePath(),
+	    "file*x1",
+	  },
+	},
+      });
+
+    try ( DataBase db = new DataBase(dbdir.toPath()) ) {
+      db.initializeByFile(dbdir.toPath().resolve(Backuper.CONFIGNAME));
+      DataBase.Storage storage = db.get("test.src");
+      storage.scanFolder();
+      checkContents(storage::dump, new String[]{
+	  ".	*",
+	  "dirx	*",
+	  //"*	fileax1",
+	  "*	fileax2",
+	  "dirx/diry	*",
+	  "*	fileaxy1",
+	  "*	fileaxy2",
+	  "diry	*",
+	  "*	fileay1",
+	  "*	fileay2",
+	  "dirz	*",
+	  "*	fileaz1",
+	  "*	fileaz2",
+	  "dirz/dirx	*",
+	  //"*	fileazx1",
+	  "*	fileazx2",
+	  "dirz/dirx/dirx	*",
+	  //"*	fileazxx1",
+	  "*	fileazxx2",
+	  "dirz/dirx/dirx/diry	*",
+	  "*	fileazxxy1",
+	  "*	fileazxxy2",
+	});
+    }
+
+    // --------------------
+    createFiles(root,new Object[]{
+	"dic", new Object[]{
+	  Backuper.CONFIGNAME, new String[]{
+	    "test.src="+srcdir.getAbsolutePath(),
+	    "/*/file*x1",
+	  },
+	},
+      });
+
+    try ( DataBase db = new DataBase(dbdir.toPath()) ) {
+      db.initializeByFile(dbdir.toPath().resolve(Backuper.CONFIGNAME));
+      DataBase.Storage storage = db.get("test.src");
+      storage.scanFolder();
+      checkContents(storage::dump, new String[]{
+	  ".	*",
+	  "dirx	*",
+	  "*	fileax1", // ToDo:本来なら、これが無視されるはず。
+	  "*	fileax2",
+	  "dirx/diry	*",
+	  "*	fileaxy1",
+	  "*	fileaxy2",
+	  "diry	*",
+	  "*	fileay1",
+	  "*	fileay2",
+	  "dirz	*",
+	  "*	fileaz1",
+	  "*	fileaz2",
+	  "dirz/dirx	*",
+	  "*	fileazx1",
+	  "*	fileazx2",
+	  "dirz/dirx/dirx	*",
+	  "*	fileazxx1",
+	  "*	fileazxx2",
+	  "dirz/dirx/dirx/diry	*",
+	  "*	fileazxxy1",
+	  "*	fileazxxy2",
+	});
+    }
+
+    // ToDo: 他のパターンもテストする。
+    // ・Windows の場合、大文字小文字を無視するか。
+    // "**/file1"
+    // "ntuser.*"
+    // "cygwinjunsei/work/*/target"
+    // "cygwinjunsei/**/#*#"
+    // "cygwinjunsei/**/*~"
+  }
+
   // ----------------------------------------------------------------------
   // ユーティリティメソッド
 
   public static DataBase execute( File root, File dbdir )
   throws IOException
   {
+    return execute(root,dbdir,false);
+  }
+
+  public static DataBase execute( File root, File dbdir, boolean useXML )
+  throws IOException
+  {
     try ( DataBase db = new DataBase(dbdir.toPath()) ) {
-      db.initializeByFile(dbdir.toPath().resolve(Backuper.CONFIGNAME));
+      if ( useXML ) {
+	db.initializeByXml(dbdir.toPath().resolve(Backuper.CONFIGXML));
+      } else {
+	db.initializeByFile(dbdir.toPath().resolve(Backuper.CONFIGNAME));
+      }
       DataBase.Storage srcStorage = db.get("test.src");
       DataBase.Storage dstStorage = db.get("test.dst");
       Backuper.backup(srcStorage,dstStorage);

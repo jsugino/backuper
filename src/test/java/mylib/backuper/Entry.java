@@ -134,12 +134,19 @@ public class Entry
 	if ( option == 2 ) list.add(ent);
 	continue;
       } else {
-	throw new IllegalArgumentException("unknown data type : "+data[i+1].getClass().getName());
+	throw new IllegalArgumentException("unknown data type : "
+	  +data[i+1].toString()
+	  +", class = "+data[i+1].getClass().getName());
       }
       ent.contents = contents;
-      if ( i+2 < data.length && data[i+2] instanceof Date ) {
-	ent.lastModified = (Date)data[i+2];
-	++i;
+      if ( i+2 < data.length ) {
+	if ( data[i+2] instanceof Date ) {
+	  ent.lastModified = (Date)data[i+2];
+	  ++i;
+	} else if ( data[i+2] instanceof Long ) {
+	  ent.lastModified = new Date((Long)data[i+2]);
+	  ++i;
+	}
       }
       list.add(ent);
     }
