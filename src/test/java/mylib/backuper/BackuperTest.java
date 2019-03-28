@@ -90,7 +90,7 @@ public class BackuperTest
     Date next = new Date(current.getTime()+3333L);
     createFiles(root,new Object[]{
 	"dic", new Object[]{
-	  Backuper.CONFIGNAME, new String[]{
+	  Main.CONFIGNAME, new String[]{
 	    "test.src="+srcdir.getAbsolutePath(),
 	    "a",
 	    "c1",
@@ -324,7 +324,7 @@ public class BackuperTest
     Date current = new Date(System.currentTimeMillis() - 10000L);
     createFiles(root,new Object[]{
 	"dic", new Object[]{
-	  Backuper.CONFIGNAME, new String[]{
+	  Main.CONFIGNAME, new String[]{
 	    "test.src="+srcdir.getAbsolutePath(),
 	    "test.dst="+dstdir.getAbsolutePath(),
 	  },
@@ -450,7 +450,7 @@ public class BackuperTest
     Date current = new Date(System.currentTimeMillis() - 10000L);
     createFiles(root,new Object[]{
 	"dic", new Object[]{
-	  Backuper.CONFIGNAME, new String[]{
+	  Main.CONFIGNAME, new String[]{
 	    "test.src="+srcdir.getAbsolutePath(),
 	    "test.dst="+dstdir.getAbsolutePath(),
 	  },
@@ -476,20 +476,20 @@ public class BackuperTest
       });
 
     try ( DataBase db = new DataBase(dbdir.toPath()) ) {
-      db.initializeByFile(dbdir.toPath().resolve(Backuper.CONFIGNAME));
+      db.initializeByFile(dbdir.toPath().resolve(Main.CONFIGNAME));
       DataBase.Storage srcStorage = db.get("test.src");
       DataBase.Storage dstStorage = db.get("test.dst");
-      Backuper.refresh(srcStorage);
-      Backuper.refresh(dstStorage);
+      Main.refresh(srcStorage);
+      Main.refresh(dstStorage);
     }
 
     try ( DataBase db = new DataBase(dbdir.toPath()) ) {
-      db.initializeByFile(dbdir.toPath().resolve(Backuper.CONFIGNAME));
-      Backuper.exCommand = Backuper.Command.BACKUP_SKIPSCAN;
+      db.initializeByFile(dbdir.toPath().resolve(Main.CONFIGNAME));
+      Main.exCommand = Main.Command.BACKUP_SKIPSCAN;
       DataBase.Storage srcStorage = db.get("test.src");
       DataBase.Storage dstStorage = db.get("test.dst");
-      Backuper.backup(srcStorage,dstStorage);
-      Backuper.exCommand = Backuper.Command.BACKUP_OR_SCANONLY;
+      Main.backup(srcStorage,dstStorage);
+      Main.exCommand = Main.Command.BACKUP_OR_SCANONLY;
     }
 
     compareFiles(dstdir,new Object[]{
@@ -518,7 +518,7 @@ public class BackuperTest
 
     createFiles(root,new Object[]{
 	"dic", new Object[]{
-	  Backuper.CONFIGNAME, new String[]{
+	  Main.CONFIGNAME, new String[]{
 	    "test.src="+srcdir.getAbsolutePath(),
 	    "test.dst="+dstdir.getAbsolutePath(),
 	  },
@@ -571,7 +571,7 @@ public class BackuperTest
     // prepareMove()
     createFiles(root,new Object[]{
 	"dic", new Object[]{
-	  Backuper.CONFIGNAME, new String[]{
+	  Main.CONFIGNAME, new String[]{
 	    "test.src="+srcdir.getAbsolutePath(),
 	    "test.dst="+dstdir.getAbsolutePath(),
 	  },
@@ -646,7 +646,7 @@ public class BackuperTest
     // prepareSimple()
     createFiles(root,new Object[]{
 	"dic", new Object[]{
-	  Backuper.CONFIGNAME, new String[]{
+	  Main.CONFIGNAME, new String[]{
 	    "test.src="+srcdir.getAbsolutePath(),
 	    "test.dst="+dstdir.getAbsolutePath(),
 	  },
@@ -743,7 +743,7 @@ public class BackuperTest
     // prepareMove()
     createFiles(root,new Object[]{
 	"dic", new Object[]{
-	  Backuper.CONFIGXML, new String[]{
+	  Main.CONFIGXML, new String[]{
 	    "<database>",
 	    "  <storage dir=\""+tempdir.getRoot()+"\" name=\"src\">",
 	    "    <folder dir=\"src\" name=\"test\"/>",
@@ -809,7 +809,7 @@ public class BackuperTest
 
     createFiles(root,new Object[]{
 	"dic", new Object[]{
-	  Backuper.CONFIGXML, new String[]{
+	  Main.CONFIGXML, new String[]{
 	    "<database>",
 	    "  <storage dir=\""+tempdir.getRoot()+"\" name=\"src\">",
 	    "    <folder dir=\"src\" name=\"test\"/>",
@@ -894,14 +894,14 @@ public class BackuperTest
     // --------------------
     createFiles(root,new Object[]{
 	"dic", new Object[]{
-	  Backuper.CONFIGNAME, new String[]{
+	  Main.CONFIGNAME, new String[]{
 	    "test.src="+srcdir.getAbsolutePath(),
 	  },
 	},
       });
 
     try ( DataBase db = new DataBase(dbdir.toPath()) ) {
-      db.initializeByFile(dbdir.toPath().resolve(Backuper.CONFIGNAME));
+      db.initializeByFile(dbdir.toPath().resolve(Main.CONFIGNAME));
       DataBase.Storage storage = db.get("test.src");
       storage.scanFolder();
       checkContents(storage::dump, new String[]{
@@ -933,7 +933,7 @@ public class BackuperTest
     // --------------------
     createFiles(root,new Object[]{
 	"dic", new Object[]{
-	  Backuper.CONFIGNAME, new String[]{
+	  Main.CONFIGNAME, new String[]{
 	    "test.src="+srcdir.getAbsolutePath(),
 	    "/diry/",
 	  },
@@ -941,7 +941,7 @@ public class BackuperTest
       });
 
     try ( DataBase db = new DataBase(dbdir.toPath()) ) {
-      db.initializeByFile(dbdir.toPath().resolve(Backuper.CONFIGNAME));
+      db.initializeByFile(dbdir.toPath().resolve(Main.CONFIGNAME));
       DataBase.Storage storage = db.get("test.src");
       storage.scanFolder();
       checkContents(storage::dump, new String[]{
@@ -973,7 +973,7 @@ public class BackuperTest
     // --------------------
     createFiles(root,new Object[]{
 	"dic", new Object[]{
-	  Backuper.CONFIGNAME, new String[]{
+	  Main.CONFIGNAME, new String[]{
 	    "test.src="+srcdir.getAbsolutePath(),
 	    "/dirx/diry/",
 	  },
@@ -981,7 +981,7 @@ public class BackuperTest
       });
 
     try ( DataBase db = new DataBase(dbdir.toPath()) ) {
-      db.initializeByFile(dbdir.toPath().resolve(Backuper.CONFIGNAME));
+      db.initializeByFile(dbdir.toPath().resolve(Main.CONFIGNAME));
       DataBase.Storage storage = db.get("test.src");
       storage.scanFolder();
       checkContents(storage::dump, new String[]{
@@ -1013,7 +1013,7 @@ public class BackuperTest
     // --------------------
     createFiles(root,new Object[]{
 	"dic", new Object[]{
-	  Backuper.CONFIGNAME, new String[]{
+	  Main.CONFIGNAME, new String[]{
 	    "test.src="+srcdir.getAbsolutePath(),
 	    "diry/",
 	  },
@@ -1021,7 +1021,7 @@ public class BackuperTest
       });
 
     try ( DataBase db = new DataBase(dbdir.toPath()) ) {
-      db.initializeByFile(dbdir.toPath().resolve(Backuper.CONFIGNAME));
+      db.initializeByFile(dbdir.toPath().resolve(Main.CONFIGNAME));
       DataBase.Storage storage = db.get("test.src");
       storage.scanFolder();
       checkContents(storage::dump, new String[]{
@@ -1053,7 +1053,7 @@ public class BackuperTest
     // --------------------
     createFiles(root,new Object[]{
 	"dic", new Object[]{
-	  Backuper.CONFIGNAME, new String[]{
+	  Main.CONFIGNAME, new String[]{
 	    "test.src="+srcdir.getAbsolutePath(),
 	    "file*x1",
 	  },
@@ -1061,7 +1061,7 @@ public class BackuperTest
       });
 
     try ( DataBase db = new DataBase(dbdir.toPath()) ) {
-      db.initializeByFile(dbdir.toPath().resolve(Backuper.CONFIGNAME));
+      db.initializeByFile(dbdir.toPath().resolve(Main.CONFIGNAME));
       DataBase.Storage storage = db.get("test.src");
       storage.scanFolder();
       checkContents(storage::dump, new String[]{
@@ -1093,7 +1093,7 @@ public class BackuperTest
     // --------------------
     createFiles(root,new Object[]{
 	"dic", new Object[]{
-	  Backuper.CONFIGNAME, new String[]{
+	  Main.CONFIGNAME, new String[]{
 	    "test.src="+srcdir.getAbsolutePath(),
 	    "/*/file*x1",
 	  },
@@ -1101,7 +1101,7 @@ public class BackuperTest
       });
 
     try ( DataBase db = new DataBase(dbdir.toPath()) ) {
-      db.initializeByFile(dbdir.toPath().resolve(Backuper.CONFIGNAME));
+      db.initializeByFile(dbdir.toPath().resolve(Main.CONFIGNAME));
       DataBase.Storage storage = db.get("test.src");
       storage.scanFolder();
       checkContents(storage::dump, new String[]{
@@ -1153,13 +1153,13 @@ public class BackuperTest
   {
     try ( DataBase db = new DataBase(dbdir.toPath()) ) {
       if ( useXML ) {
-	db.initializeByXml(dbdir.toPath().resolve(Backuper.CONFIGXML));
+	db.initializeByXml(dbdir.toPath().resolve(Main.CONFIGXML));
       } else {
-	db.initializeByFile(dbdir.toPath().resolve(Backuper.CONFIGNAME));
+	db.initializeByFile(dbdir.toPath().resolve(Main.CONFIGNAME));
       }
       DataBase.Storage srcStorage = db.get("test.src");
       DataBase.Storage dstStorage = db.get("test.dst");
-      Backuper.backup(srcStorage,dstStorage);
+      Main.backup(srcStorage,dstStorage);
       return db;
     }
   }
@@ -1451,7 +1451,7 @@ public class BackuperTest
     System.out.println("logger class for DataBase = "+log.getClass().getName());
     log.info("This is a test message for DataBase");
 
-    log = LoggerFactory.getLogger(Backuper.class);
+    log = LoggerFactory.getLogger(Main.class);
     System.out.println("logger class for Backuper = "+log.getClass().getName());
     log.info("This is a test message for Backuper");
 

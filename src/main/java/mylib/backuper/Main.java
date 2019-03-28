@@ -18,9 +18,9 @@ import mylib.backuper.DataBase.File;
 import mylib.backuper.DataBase.Folder;
 import mylib.backuper.DataBase.Storage;
 
-public class Backuper
+public class Main
 {
-  private final static Logger log = LoggerFactory.getLogger(Backuper.class);
+  private final static Logger log = LoggerFactory.getLogger(Main.class);
 
   // execute commands
   static enum Command {

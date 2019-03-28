@@ -69,7 +69,7 @@ public class FtpTest
 
     createFiles(root,new Object[]{
 	"dic", new Object[]{
-	  Backuper.CONFIGNAME, new String[]{
+	  Main.CONFIGNAME, new String[]{
 	    "test.src="+srcdir.getAbsolutePath(),
 	    "a",
 	    "c1",
@@ -297,7 +297,7 @@ public class FtpTest
 
     createFiles(root,new Object[]{
 	"dic", new Object[]{
-	  Backuper.CONFIGNAME, new String[]{
+	  Main.CONFIGNAME, new String[]{
 	    "test.src="+ftpurl,
 	    "a",
 	    "c1",
@@ -528,7 +528,7 @@ public class FtpTest
     String params[] = FtpStorage.parseURL(ftpurl);
     createFiles(root,new Object[]{
 	"dic", new Object[]{
-	  Backuper.CONFIGXML, new String[]{
+	  Main.CONFIGXML, new String[]{
 	    "<database>",
 	    "  <storage ftp=\""+params[2]+"\" user=\""+params[0]+"\" password=\""+params[1]+"\" name=\"comb\">",
 	    "    <folder dir=\".\" name=\"comb\">",
@@ -548,8 +548,8 @@ public class FtpTest
 	},
       });
     try ( DataBase db = new DataBase(dbdir.toPath()) ) {
-      db.initializeByXml(dbdir.toPath().resolve(Backuper.CONFIGXML));
-      Iterator<Storage> itr = Backuper.listDB(db).iterator();
+      db.initializeByXml(dbdir.toPath().resolve(Main.CONFIGXML));
+      Iterator<Storage> itr = Main.listDB(db).iterator();
       assertEquals("blog.comb=ftp://"+params[2]+"/www/blog",itr.next().toString());
       assertEquals("comb.comb=ftp://"+params[2]+"/",itr.next().toString());
       assertFalse(itr.hasNext());
@@ -566,7 +566,7 @@ public class FtpTest
     File dbdir = new File(root,"dic");
     createFiles(root,new Object[]{
 	"dic", new Object[]{
-	  Backuper.CONFIGNAME, new String[]{
+	  Main.CONFIGNAME, new String[]{
 	    "test.dst="+ftpurl,
 	  },
 	},

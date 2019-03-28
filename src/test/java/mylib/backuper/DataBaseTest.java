@@ -321,7 +321,7 @@ public class DataBaseTest
     try ( DataBase db = new DataBase(tempdir.getRoot().toPath()) ) {
       db.initializeByXml(Paths.get(DataBase.class.getClassLoader()
 	  .getResource("mylib/backuper/folders.conf.xml").getPath()));
-      Iterator<DataBase.Storage> itr = Backuper.listDB(db).iterator();
+      Iterator<DataBase.Storage> itr = Main.listDB(db).iterator();
       assertEquals("BACKUP.C=/mnt/C/BACKUP",itr.next().toString());
       assertEquals("Common.C=/mnt/C/BACKUP/Common",itr.next().toString());
       assertEquals("Common.D=/mnt/D/Common",itr.next().toString());
