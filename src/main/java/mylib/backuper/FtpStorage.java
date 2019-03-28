@@ -305,4 +305,10 @@ public class FtpStorage extends Storage
 	+", code = "+ftpclient.getReplyCode()
 	+", message = "+ftpclient.getReplyString());
   }
+
+  @Override
+  public String toString()
+  {
+    return storageName+'='+getRoot();
+  }
 }

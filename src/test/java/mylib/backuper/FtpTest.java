@@ -549,9 +549,9 @@ public class FtpTest
       });
     try ( DataBase db = new DataBase(dbdir.toPath()) ) {
       db.initializeByXml(dbdir.toPath().resolve(Backuper.CONFIGXML));
-      Iterator<String> itr = Backuper.listDB(db).iterator();
-      assertEquals("blog.comb=ftp://"+params[2]+"/www/blog",itr.next());
-      assertEquals("comb.comb=ftp://"+params[2]+"/",itr.next());
+      Iterator<Storage> itr = Backuper.listDB(db).iterator();
+      assertEquals("blog.comb=ftp://"+params[2]+"/www/blog",itr.next().toString());
+      assertEquals("comb.comb=ftp://"+params[2]+"/",itr.next().toString());
       assertFalse(itr.hasNext());
     }
   }

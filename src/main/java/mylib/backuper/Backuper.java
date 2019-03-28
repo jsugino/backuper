@@ -91,7 +91,20 @@ public class Backuper
 
       case LISTDB:
 	{
-	  listDB(db).stream().forEach(System.out::println);
+	  for ( Storage storage : listDB(db) ) {
+	    if ( !Files.isReadable(db.dbFolder.resolve(storage.storageName+".db")) ) {
+	      System.out.format("%-20s (no *.db file) %s",
+		storage.storageName,
+		storage.getRoot()).println();
+	    } else {
+	      storage.readDB();
+	      System.out.format("%-20s %6d %7d %s",
+		storage.storageName,
+		storage.folders.size(),
+		storage.folders.stream().mapToLong(f->f.files.size()).sum(),
+		storage.getRoot()).println();
+	    }
+	  }
 	}
 	break;
       }
@@ -303,13 +316,13 @@ public class Backuper
     log.info("End Simulation "+srcStorage.storageName+" "+dstStorage.storageName);
   }
 
-  public static List<String> listDB( DataBase db )
+  public static List<Storage> listDB( DataBase db )
   {
     String keys[] = db.keySet().toArray(new String[0]);
     Arrays.sort(keys);
-    LinkedList<String> list = new LinkedList<>();
+    LinkedList<Storage> list = new LinkedList<>();
     for ( String key : keys ) {
-      list.add(key+'='+db.get(key).getRoot());
+      list.add(db.get(key));
     }
     return list;
   }

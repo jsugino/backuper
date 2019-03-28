@@ -133,7 +133,8 @@ public class LocalStorage extends Storage
   @Override
   public String toString()
   {
-    StringBuffer buf = new StringBuffer(rootFolder.toString());
+    StringBuffer buf = new StringBuffer(storageName);
+    buf.append('=').append(rootFolder.toString());
     if ( folders != null ) {
       buf.append(" (");
       int cnt = 0;

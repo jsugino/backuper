@@ -321,26 +321,26 @@ public class DataBaseTest
     try ( DataBase db = new DataBase(tempdir.getRoot().toPath()) ) {
       db.initializeByXml(Paths.get(DataBase.class.getClassLoader()
 	  .getResource("mylib/backuper/folders.conf.xml").getPath()));
-      Iterator<String> itr = Backuper.listDB(db).iterator();
-      assertEquals("BACKUP.C=/mnt/C/BACKUP",itr.next());
-      assertEquals("Common.C=/mnt/C/BACKUP/Common",itr.next());
-      assertEquals("Common.D=/mnt/D/Common",itr.next());
-      assertEquals("Common.G=/run/media/junsei/HD-LBU3/Common",itr.next());
-      assertEquals("Linux.junsei.C=/mnt/C/BACKUP/Linux/home/junsei",itr.next());
-      assertEquals("Linux.junsei.D=/mnt/D/Linux/home/junsei",itr.next());
-      assertEquals("Linux.junsei.G=/run/media/junsei/HD-LBU3/Linux/home/junsei",itr.next());
-      assertEquals("Linux.junsei.SSD=/home/junsei",itr.next());
-      assertEquals("Users.history.D=/mnt/D/Users.history",itr.next());
-      assertEquals("Users.history.G=/run/media/junsei/HD-LBU3/Users.history",itr.next());
-      assertEquals("Users.history.junsei.D=/mnt/D/Users.history/junsei",itr.next());
-      assertEquals("Users.junsei.C=/mnt/C/Users/junsei",itr.next());
-      assertEquals("Users.junsei.D=/mnt/D/Users/junsei",itr.next());
-      assertEquals("Users.junsei.G=/run/media/junsei/HD-LBU3/Users/junsei",itr.next());
-      assertEquals("VMs.C=/mnt/C/BACKUP/Virtual Machines",itr.next());
-      assertEquals("VMs.D=/mnt/D/Virtual Machines",itr.next());
-      assertEquals("VMs.G=/run/media/junsei/HD-LBU3/Virtual Machines",itr.next());
-      assertEquals("blog.C=/mnt/C/BACKUP/Downloads/5.blog",itr.next());
-      assertEquals("blog.comb=ftp://my.host.ne.jp/www/blog",itr.next());
+      Iterator<DataBase.Storage> itr = Backuper.listDB(db).iterator();
+      assertEquals("BACKUP.C=/mnt/C/BACKUP",itr.next().toString());
+      assertEquals("Common.C=/mnt/C/BACKUP/Common",itr.next().toString());
+      assertEquals("Common.D=/mnt/D/Common",itr.next().toString());
+      assertEquals("Common.G=/run/media/junsei/HD-LBU3/Common",itr.next().toString());
+      assertEquals("Linux.junsei.C=/mnt/C/BACKUP/Linux/home/junsei",itr.next().toString());
+      assertEquals("Linux.junsei.D=/mnt/D/Linux/home/junsei",itr.next().toString());
+      assertEquals("Linux.junsei.G=/run/media/junsei/HD-LBU3/Linux/home/junsei",itr.next().toString());
+      assertEquals("Linux.junsei.SSD=/home/junsei",itr.next().toString());
+      assertEquals("Users.history.D=/mnt/D/Users.history",itr.next().toString());
+      assertEquals("Users.history.G=/run/media/junsei/HD-LBU3/Users.history",itr.next().toString());
+      assertEquals("Users.history.junsei.D=/mnt/D/Users.history/junsei",itr.next().toString());
+      assertEquals("Users.junsei.C=/mnt/C/Users/junsei",itr.next().toString());
+      assertEquals("Users.junsei.D=/mnt/D/Users/junsei",itr.next().toString());
+      assertEquals("Users.junsei.G=/run/media/junsei/HD-LBU3/Users/junsei",itr.next().toString());
+      assertEquals("VMs.C=/mnt/C/BACKUP/Virtual Machines",itr.next().toString());
+      assertEquals("VMs.D=/mnt/D/Virtual Machines",itr.next().toString());
+      assertEquals("VMs.G=/run/media/junsei/HD-LBU3/Virtual Machines",itr.next().toString());
+      assertEquals("blog.C=/mnt/C/BACKUP/Downloads/5.blog",itr.next().toString());
+      assertEquals("blog.comb=ftp://my.host.ne.jp/www/blog",itr.next().toString());
       assertFalse(itr.hasNext());
     }
   }
