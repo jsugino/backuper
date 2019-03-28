@@ -270,36 +270,25 @@ public class BackuperTest
 	},
 	"Scan Folder test.src "+srcdir.getAbsolutePath(), new String[]{
 	  "Ignore file a",
-	  "calculate MD5 b",
 	  "Ignore symlink l",
 	  "Ignore symlink lc",
 	  "Ignore file c/c1",
-	  "calculate MD5 c/c2",
-	  "calculate MD5 c/c3",
-	  "calculate MD5 c/c4",
-	  "calculate MD5 c/d/d",
-	  "calculate MD5 g1/g2/g3/g",
 	  "Ignore symlink c/d/lc",
 	  "Ignore symlink c/d/lc1",
 	  "Ignore symlink c/d/lx",
 	},
-	"Write DataBase test.src "+dbdir+"/test.src.db",
 	"Read DataBase test.dst "+dbdir+"/test.dst.db", new String[]{
 	  "java.nio.file.NoSuchFileException: "+dbdir+"/test.dst.db",
 	},
 	"Scan Folder test.dst "+dstdir.getAbsolutePath(), new String[]{
 	  "Ignore file x",
 	  "Ignore file y/y1",
-	  "calculate MD5 y/y2",
-	  "calculate MD5 c/c2",
-	  "calculate MD5 c/c3",
-	  "calculate MD5 c/c4",
-	  "calculate MD5 z/za",
-	  "calculate MD5 z/z1/zb",
-	  "calculate MD5 z/z1/z2/zc",
 	},
-	"Write DataBase test.dst "+dbdir+"/test.dst.db",
 	"Compare Files test.src test.dst", new String[]{
+	  "calculate MD5 test.src c/c3",
+	  "calculate MD5 test.dst c/c3",
+	  "calculate MD5 test.src c/c4",
+	  "calculate MD5 test.dst c/c4",
 	  "copy b",
 	  "copy g1/g2/g3/g",
 	  "copy override c/c2",
@@ -317,6 +306,7 @@ public class BackuperTest
 	  "delete z/z1/zb",
 	  "delete z/z1/z2/zc",
 	},
+	"Write DataBase test.src "+dbdir+"/test.src.db",
 	"Write DataBase test.dst "+dbdir+"/test.dst.db",
 	"End Backup test.src test.dst",
       });
@@ -411,35 +401,15 @@ public class BackuperTest
 	  "java.nio.file.NoSuchFileException: "+dbdir+"/test.src.db",
 	},
 	"Scan Folder test.src "+srcdir.getAbsolutePath(), new String[]{
-	  "calculate MD5 1",
-	  "calculate MD5 2",
-	  "calculate MD5 4/1",
-	  "calculate MD5 5",
-	  "calculate MD5 6/1",
-	  "calculate MD5 6/2",
-	  "calculate MD5 dir/a",
-	  "calculate MD5 dir/x/x1",
-	  "calculate MD5 dir/y",
-	  "calculate MD5 dir/z",
 	},
-	"Write DataBase test.src "+dbdir+"/test.src.db",
 	"Read DataBase test.dst "+dbdir+"/test.dst.db", new String[]{
 	  "java.nio.file.NoSuchFileException: "+dbdir+"/test.dst.db",
 	},
 	"Scan Folder test.dst "+dstdir.getAbsolutePath(), new String[]{
-	  "calculate MD5 2",
-	  "calculate MD5 3",
-	  "calculate MD5 4",
-	  "calculate MD5 5/1",
-	  "calculate MD5 6/2",
-	  "calculate MD5 6/3",
-	  "calculate MD5 dir/b",
-	  "calculate MD5 dir/z/c",
 	  "Ignore symlink dir/x",
 	  "Ignore symlink dir/y",
 	  "Ignore symlink dir/z/z1",
 	},
-	"Write DataBase test.dst "+dbdir+"/test.dst.db",
 	"Compare Files test.src test.dst", new String[]{
 	  "copy 1",
 	  "delete 3",
@@ -454,10 +424,15 @@ public class BackuperTest
 	  "copy dir/a",
 	  "delete dir/b",
 	  "delete dir/z/c",
+	  "calculate MD5 test.src 2",
+	  "calculate MD5 test.src 6/2",
+	  "calculate MD5 test.dst 2",
+	  "calculate MD5 test.dst 6/2",
 	  "CANNOT COPY dir/x/x1",
 	  "CANNOT COPY dir/y",
 	  "CANNOT COPY dir/z",
 	},
+	"Write DataBase test.src "+dbdir+"/test.src.db",
 	"Write DataBase test.dst "+dbdir+"/test.dst.db",
 	"End Backup test.src test.dst",
       });
@@ -570,9 +545,13 @@ public class BackuperTest
 
     checkEvent(new Object[]{
 	"Compare Files test.src test.dst", new String[]{
+	  "calculate MD5 test.src 1",
+	  "calculate MD5 test.src 3",
+	  "calculate MD5 test.dst 1",
+	  "calculate MD5 test.dst 3",
 	  "copy override 2",
 	},
-	"Write DataBase test.dst "+dbdir+"/test.dst.db",
+	"Write DataBase test.src "+dbdir+"/test.src.db",
       });
   }
 
@@ -649,7 +628,7 @@ public class BackuperTest
 	  "set lastModified 1/3",
 	  */
 	},
-	"Write DataBase test.dst "+dbdir+"/test.dst.db",
+	"Write DataBase test.src "+dbdir+"/test.src.db",
       });
   }
 
@@ -730,6 +709,10 @@ public class BackuperTest
     checkEvent(new Object[]{
 	"Compare Files test.src test.dst",new String[]{
 	  // ToDo: 今は、次のようになってしまう。履歴の保存時のアクションも追加する必要がある。
+	  "calculate MD5 test.src 2",
+	  "calculate MD5 test.src 6/2",
+	  "calculate MD5 test.dst 2",
+	  "calculate MD5 test.dst 6/2",
 	  "copy 1",
 	  "delete 3",
 	  "delete 4",
@@ -742,7 +725,7 @@ public class BackuperTest
 	  "copy override 6/2",
 	  "delete 6/3",
 	},
-	"Write DataBase test.dst "+dbdir+"/test.dst.db",
+	"Write DataBase test.src "+dbdir+"/test.src.db",
       });
   }
 
@@ -1185,7 +1168,7 @@ public class BackuperTest
   public static List<String> selectEvents( Iterator<ILoggingEvent> iterator, String startPat, String endPat )
   {
     LinkedList<String> result = new LinkedList<>();
-    Boolean inner = (startPat == null);
+    boolean inner = (startPat == null);
     while ( iterator.hasNext() ) {
       ILoggingEvent ev = iterator.next();
       if ( ev.getLevel().toInt() < Level.DEBUG_INT ) continue;
@@ -1208,8 +1191,9 @@ public class BackuperTest
     Iterator<ILoggingEvent> iterator = event.list.iterator();
     if ( !(expects[0] instanceof String) ) fail("expects[0] must be String : "+expects[0]);
     String startPat = (String)expects[0];
+    String prevPat = startPat;
     for ( int i = 0; i < expects.length-1; ++i ) {
-      String expstrs[] = new String[]{};
+      String expstrs[] = new String[0];
       if ( expects[i+1] instanceof String[] ) {
 	expstrs = (String[])expects[i+1];
 	++i;
@@ -1223,8 +1207,9 @@ public class BackuperTest
 	.filter(exp->!actual.remove(exp))
 	.collect(Collectors.toList());
       if ( remain.size() > 0 || actual.size() > 0 )
-	fail(String.format("different events from \"%s\" to \"%s\" : expects = %s, actual = %s ",startPat,endPat,remain,actual));
+	fail(String.format("different events from \"%s\" to \"%s\" : expects = %s, actual = %s ",prevPat,endPat,remain,actual));
       startPat = null;
+      prevPat = endPat;
     }
   }
 

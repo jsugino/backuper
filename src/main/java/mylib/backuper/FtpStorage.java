@@ -59,21 +59,23 @@ public class FtpStorage extends Storage
 	return false;
       }
 
-      log.trace("ftp chdir : "+rootFolder);
-      result = ftpclient.changeWorkingDirectory(rootFolder);
-      if ( !result || !FTPReply.isPositiveCompletion(ftpclient.getReplyCode()) ) {
-	log.error("changeWorkingDirectory Failed : result="+result
-	  +", code="+ftpclient.getReplyCode()
-	  +", message="+ftpclient.getReplyString()
-	);
-	close();
-	return false;
+      if ( rootFolder.length() > 0 && !rootFolder.equals(".") ) {
+	log.trace("ftp chdir : "+rootFolder);
+	result = ftpclient.changeWorkingDirectory(rootFolder);
+	if ( !result || !FTPReply.isPositiveCompletion(ftpclient.getReplyCode()) ) {
+	  log.error("changeWorkingDirectory Failed : result="+result
+	    +", code="+ftpclient.getReplyCode()
+	    +", message="+ftpclient.getReplyString()
+	  );
+	  close();
+	  return false;
+	}
       }
 
       log.trace("ftp passive mode");
       ftpclient.enterLocalPassiveMode();
       if ( !FTPReply.isPositiveCompletion(ftpclient.getReplyCode()) ) {
-	log.error("changeWorkingDirectory failed "
+	log.error("enterLocalPassiveMode failed "
 	  +": code = "+ftpclient.getReplyCode()
 	  +", message="+ftpclient.getReplyString()
 	);

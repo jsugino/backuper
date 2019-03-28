@@ -188,6 +188,7 @@ public class DataBase extends HashMap<String,DataBase.Storage> implements Closea
 	  if ( folder.files.size() == 0 ) continue;
 	  out.println(folder.folderPath.toString());
 	  for ( File file : folder.files ) {
+	    if ( file.hashValue == null ) continue;
 	    file.dump(out);
 	  }
 	}
@@ -207,6 +208,7 @@ public class DataBase extends HashMap<String,DataBase.Storage> implements Closea
       Folder dstFolder = dstStorage.getFolder(parentPath);
       File   dstFile   = findFromList(dstFolder.files,filePath);
       String command   = override ? "copy override " : "copy ";
+      long   unit      = Math.max(srcStorage.timeUnit(),dstStorage.timeUnit());
       if ( dstFile == null ) {
 	if ( override ) throw new IOException("Override is requested, but the file is not existed : "+filePath );
 	dstFile = new File(filePath);
@@ -214,12 +216,23 @@ public class DataBase extends HashMap<String,DataBase.Storage> implements Closea
       } else {
 	if ( !override ) throw new IOException("Override is not requested, but the file is existed : "+filePath );
       }
-      long unit = Math.max(srcStorage.timeUnit(),dstStorage.timeUnit());
-      dstFile.hashValue = srcFile.hashValue;
-      dstFile.length = srcFile.length;
-      dstFile.lastModified = srcFile.lastModified/unit*unit;
+
+      if ( override && srcFile.length == dstFile.length ) {
+	if ( srcFile.hashValue == null ) srcFile.hashValue = this.getMD5(srcFile.filePath);
+	if ( dstFile.hashValue == null ) dstFile.hashValue = dstStorage.getMD5(dstFile.filePath);
+	if ( srcFile.hashValue.equals(dstFile.hashValue) ) {
+	  if ( srcFile.lastModified/unit != dstFile.lastModified/unit ) {
+	    log.info("set lastModified "+dstFile.filePath);
+	    dstFile.lastModified = srcFile.lastModified/unit*unit;
+	    dstFile.length = srcFile.length;
+	    dstStorage.setLastModified(dstFile.filePath,dstFile.lastModified);
+	  }
+	  return;
+	}
+      }
 
       log.info(command+filePath);
+      digest.reset();
       try ( 
 	InputStream  in  = this.newInputStream(srcFile.filePath);
 	OutputStream out = dstStorage.newOutputStream(dstFile.filePath);
@@ -228,8 +241,17 @@ public class DataBase extends HashMap<String,DataBase.Storage> implements Closea
 	int len;
 	while ( (len = in.read(buf)) > 0 ) {
 	  out.write(buf,0,len);
+	  digest.update(buf,0,len);
 	}
       }
+      String md5 = getDigestString();
+      if ( srcFile.hashValue != null && !srcFile.hashValue.equals(md5) ) {
+	log.warn("different MD5 : path = "+srcFile.filePath
+	  +", orig = "+srcFile.hashValue+", new = "+md5);
+      }
+      dstFile.length = srcFile.length;
+      dstFile.lastModified = srcFile.lastModified/unit*unit;
+      dstFile.hashValue = srcFile.hashValue = md5;
       dstStorage.setLastModified(dstFile.filePath,dstFile.lastModified);
     }
 
@@ -333,8 +355,6 @@ public class DataBase extends HashMap<String,DataBase.Storage> implements Closea
 	      file.lastModified == origfile.lastModified
 	    ) {
 	      file.hashValue = origfile.hashValue;
-	    } else {
-	      file.hashValue = getMD5(relpath);
 	    }
 	  }
 	}
@@ -362,6 +382,16 @@ public class DataBase extends HashMap<String,DataBase.Storage> implements Closea
       }
     }
 
+    public void updateHashvalue()
+    throws IOException
+    {
+      for ( Folder folder : folders ) {
+	for ( File file : folder.files ) {
+	  if ( file.hashValue == null ) file.hashValue = getMD5(file.filePath);
+	}
+      }
+    }
+
     // --------------------------------------------------
     public void dump( PrintStream out )
     {
@@ -377,7 +407,7 @@ public class DataBase extends HashMap<String,DataBase.Storage> implements Closea
     public String getMD5( Path path )
     throws IOException
     {
-      log.info("calculate MD5 "+path);
+      log.info("calculate MD5 "+storageName+" "+path);
 
       digest.reset();
       try ( InputStream in = newInputStream(path) )
@@ -388,6 +418,11 @@ public class DataBase extends HashMap<String,DataBase.Storage> implements Closea
 	  digest.update(buf,0,len);
 	}
       }
+      return getDigestString();
+    }
+
+    public String getDigestString()
+    {
       String str = Base64.getEncoder().encodeToString(digest.digest());
       int idx = str.indexOf('=');
       if ( idx > 0 ) str = str.substring(0,idx);
@@ -560,7 +595,6 @@ public class DataBase extends HashMap<String,DataBase.Storage> implements Closea
 	    String dir = getAttr(folder,"dir");
 	    if ( dir == null ) { attrerror("dir",folder); continue; }
 	    String name = getAttr(folder,"name");
-	    if ( name == null ) name = dir.replace('/','.');
 	    list.add(dir);
 	    list.add(name);
 	  }
@@ -576,8 +610,8 @@ public class DataBase extends HashMap<String,DataBase.Storage> implements Closea
 	    if ( hostname == null ) { attrerror("ftp",elem); continue; }
 	    String name = getAttr(elem,"name");
 	    if ( name == null ) { attrerror("name",elem); continue; }
-	    parseFolders(elem.getChildNodes(),name,"","",folderdefMap,null,(n,p)->
-	      new FtpStorage(this,n,userid,password,hostname,p.toString()));
+	    parseFolders(elem.getChildNodes(),name,"",null,folderdefMap,null,(n,p)->
+	      new FtpStorage(this,n,userid,password,hostname,p.normalize().toString()));
 	  } else {
 	    String dir = getAttr(elem,"dir");
 	    if ( dir == null || dir.length() == 0 ) { attrerror("dir",elem); continue; }
@@ -585,7 +619,7 @@ public class DataBase extends HashMap<String,DataBase.Storage> implements Closea
 	    if ( name == null || name.length() == 0 ) { attrerror("name",elem); continue; }
 	    log.trace(name+'='+dir);
 	    if ( dir.charAt(dir.length()-1) != '/' ) dir = dir+'/';
-	    parseFolders(elem.getChildNodes(),name,dir,"",folderdefMap,null,(n,p)->new LocalStorage(this,n,p));
+	    parseFolders(elem.getChildNodes(),name,dir,null,folderdefMap,null,(n,p)->new LocalStorage(this,n,p));
 	  }
 	} else if ( tagname.equals("backup") ) {
 	} else {
@@ -620,9 +654,12 @@ public class DataBase extends HashMap<String,DataBase.Storage> implements Closea
 	String defs[] = folderdefMap.get(getAttr(folder,"ref"));
 	if ( defs == null ) { nodeerror("No reference",folder); continue; }
 	for ( int j = 0; j < defs.length; j += 2 ) {
-	  String strName = parentName+defs[j+1]+'.'+driveName;
-	  this.put(strName,newFunc.apply(strName,Paths.get(parentDir+defs[j])));
-	  //this.put(strName,new LocalStorage(this,strName,Paths.get(parentDir+defs[j])));
+	  String newName = calcName(parentName,defs[j],defs[j+1]);
+	  log.trace("calcName-1("+parentName+","+defs[j]+","+defs[j+1]+")="+newName);
+	  if ( newName != null ) {
+	    String strName = newName+'.'+driveName;
+	    this.put(strName,newFunc.apply(strName,Paths.get(parentDir+defs[j])));
+	  }
 	}
 	if ( folder.getChildNodes().getLength() > 0 )
 	  log.error("Ignore sub nodes : "+serialize(folder));
@@ -630,23 +667,43 @@ public class DataBase extends HashMap<String,DataBase.Storage> implements Closea
 	String dir = getAttr(folder,"dir");
 	if ( dir == null ) { attrerror("dir",folder); continue; }
 	String name = getAttr(folder,"name");
-	if ( name == null ) name = dir.replace('/','.');
 	log.trace("parentName = "+parentName+", name = "+name
 	  +", driveName = "+driveName
 	  +", parentDir = "+parentDir+", dir = "+dir);
-	String newName = parentName+name;
+	String newName = calcName(parentName,dir,name);
+	log.trace("calcName-2("+parentName+","+dir+","+name+")="+newName);
 	String newDir = parentDir+dir;
 	Storage storage = null;
-	if ( name.length() > 0 ) {
-	  newName = newName+'.';
-	  String strName = newName+driveName;
-	  //storage = new LocalStorage(this,strName,Paths.get(newDir));
+	if ( newName != null ) {
+	  String strName = newName+'.'+driveName;
 	  storage = newFunc.apply(strName,Paths.get(newDir));
+	  log.trace("register new storage : "+strName+"="+storage.getRoot());
 	  this.put(strName,storage);
 	}
 	parseFolders(folder.getChildNodes(),driveName,newDir+'/',newName,folderdefMap,storage,newFunc);
       }
     }
+  }
+
+  public static String calcName( String parentName, String dir, String name )
+  {
+    if ( name == null ) {
+      String strDir = dir.replace('/','.');
+      return parentName == null ? strDir : parentName+'.'+strDir;
+    } else if ( name.length() == 0 ) {
+      log.error("name length == 0");
+    } else if ( name.equals(".") ) {
+      log.error("name == .");
+    } else if ( name.charAt(0) == '.' ) {
+      if ( parentName == null ) {
+	log.error("parent name is null");
+      } else {
+	return parentName+name;
+      }
+    } else {
+      return name;
+    }
+    return null;
   }
 
   public static String getAttr( Element elem, String attrName )
@@ -682,6 +739,7 @@ public class DataBase extends HashMap<String,DataBase.Storage> implements Closea
       log.trace("find Element : "+serialize(node));
       return (Element)node;
     case Node.TEXT_NODE: break;
+    case Node.COMMENT_NODE: break;
     default: unknown(node); break;
     }
     return null;

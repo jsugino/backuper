@@ -173,7 +173,6 @@ public class Backuper
       srcStorage.complementFolders();
     } else {
       srcStorage.scanFolder();
-      srcStorage.writeDB();
     }
 
     dstStorage.readDB();
@@ -181,7 +180,6 @@ public class Backuper
       dstStorage.complementFolders();
     } else {
       dstStorage.scanFolder();
-      dstStorage.writeDB();
     }
 
     log.debug("Compare Files "+srcStorage.storageName+" "+dstStorage.storageName);
@@ -248,6 +246,7 @@ public class Backuper
     }
 
     // write DB
+    srcStorage.writeDB();
     dstStorage.writeDB();
 
     log.info("End Backup "+srcStorage.storageName+" "+dstStorage.storageName);
@@ -259,6 +258,7 @@ public class Backuper
     log.info("Start Refresh "+storage.storageName);
     storage.readDB();
     storage.scanFolder();
+    storage.updateHashvalue();
     storage.writeDB();
     log.info("End Refresh "+storage.storageName);
   }
@@ -347,7 +347,10 @@ public class Backuper
       int cmp = frfile.filePath.compareTo(tofile.filePath);
       log.trace("compare "+frfile.filePath+((cmp < 0) ? " < " : (cmp > 0) ? " > " : " = ")+tofile.filePath);
       if ( cmp == 0 ) {
-	if ( !frfile.hashValue.equals(tofile.hashValue) ) {
+	if (
+	  frfile.hashValue == null || tofile.hashValue == null || 
+	  !frfile.hashValue.equals(tofile.hashValue)
+	) {
 	  copylist.add(frfile);
 	} else if ( frfile.lastModified/unit != tofile.lastModified/unit ) {
 	  difftimelist.add(frfile);

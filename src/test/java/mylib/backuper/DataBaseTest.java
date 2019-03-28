@@ -256,6 +256,13 @@ public class DataBaseTest
       assertEquals(0,storage.ignoreFilePats.size());
       assertEquals(0,storage.ignoreFolderPats.size());
 
+      storage = db.remove("BACKUP.C");
+      assertEquals(LocalStorage.class,storage.getClass());
+      local = (LocalStorage)storage;
+      assertEquals(Paths.get("/mnt/C/BACKUP"),local.rootFolder);
+      assertEquals(0,storage.ignoreFilePats.size());
+      assertEquals(0,storage.ignoreFolderPats.size());
+
       storage = db.remove("Common.C");
       assertEquals(LocalStorage.class,storage.getClass());
       local = (LocalStorage)storage;
@@ -315,6 +322,7 @@ public class DataBaseTest
       db.initializeByXml(Paths.get(DataBase.class.getClassLoader()
 	  .getResource("mylib/backuper/folders.conf.xml").getPath()));
       Iterator<String> itr = Backuper.listDB(db).iterator();
+      assertEquals("BACKUP.C=/mnt/C/BACKUP",itr.next());
       assertEquals("Common.C=/mnt/C/BACKUP/Common",itr.next());
       assertEquals("Common.D=/mnt/D/Common",itr.next());
       assertEquals("Common.G=/run/media/junsei/HD-LBU3/Common",itr.next());

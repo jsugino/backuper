@@ -12,6 +12,7 @@ import static mylib.backuper.BackuperTest.line;
 import static mylib.backuper.FtpStorage.FTPTIMEFORM;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.fail;
 
 import java.io.ByteArrayInputStream;
@@ -23,6 +24,7 @@ import java.nio.file.Paths;
 import java.util.Arrays;
 import java.util.Date;
 import java.util.HashMap;
+import java.util.Iterator;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
@@ -238,36 +240,25 @@ public class FtpTest
 	},
 	"Scan Folder test.src "+srcdir.getAbsolutePath(), new String[]{
 	  "Ignore file a",
-	  "calculate MD5 b",
 	  "Ignore symlink l",
 	  "Ignore symlink lc",
 	  "Ignore file c/c1",
-	  "calculate MD5 c/c2",
-	  "calculate MD5 c/c3",
-	  "calculate MD5 c/c4",
-	  "calculate MD5 c/d/d",
-	  "calculate MD5 g1/g2/g3/g",
 	  "Ignore symlink c/d/lc",
 	  "Ignore symlink c/d/lc1",
 	  "Ignore symlink c/d/lx",
 	},
-	"Write DataBase test.src "+dbdir+"/test.src.db",
 	"Read DataBase test.dst "+dbdir+"/test.dst.db", new String[]{
 	  "java.nio.file.NoSuchFileException: "+dbdir+"/test.dst.db",
 	},
 	"Scan Folder test.dst "+ftpstr, new String[]{
 	  "Ignore file x",
 	  "Ignore file y/y1",
-	  "calculate MD5 y/y2",
-	  "calculate MD5 c/c2",
-	  "calculate MD5 c/c3",
-	  "calculate MD5 c/c4",
-	  "calculate MD5 z/za",
-	  "calculate MD5 z/z1/zb",
-	  "calculate MD5 z/z1/z2/zc",
 	},
-	"Write DataBase test.dst "+dbdir+"/test.dst.db",
 	"Compare Files test.src test.dst", new String[]{
+	  "calculate MD5 test.src c/c3",
+	  "calculate MD5 test.dst c/c3",
+	  "calculate MD5 test.src c/c4",
+	  "calculate MD5 test.dst c/c4",
 	  "copy b",
 	  "copy g1/g2/g3/g",
 	  "copy override c/c2",
@@ -285,6 +276,7 @@ public class FtpTest
 	  "delete z/z1/zb",
 	  "delete z/z1/z2/zc",
 	},
+	"Write DataBase test.src "+dbdir+"/test.src.db",
 	"Write DataBase test.dst "+dbdir+"/test.dst.db",
 	"End Backup test.src test.dst",
       });
@@ -486,14 +478,7 @@ public class FtpTest
 	"Scan Folder test.src "+ftpstr, new String[]{
 	  "Ignore file a",
 	  "Ignore file c/c1",
-	  "calculate MD5 b",
-	  "calculate MD5 c/c2",
-	  "calculate MD5 c/c3",
-	  "calculate MD5 c/c4",
-	  "calculate MD5 c/d/d",
-	  "calculate MD5 g1/g2/g3/g",
 	},
-	"Write DataBase test.src "+dbdir+"/test.src.db",
 	"Read DataBase test.dst "+dbdir+"/test.dst.db", new String[]{
 	  "java.nio.file.NoSuchFileException: "+dbdir+"/test.dst.db",
 	},
@@ -505,16 +490,12 @@ public class FtpTest
 	  "Ignore symlink z/z1/lc",
 	  "Ignore symlink z/z1/lc1",
 	  "Ignore symlink z/z1/lx",
-	  "calculate MD5 y/y2",
-	  "calculate MD5 c/c2",
-	  "calculate MD5 c/c3",
-	  "calculate MD5 c/c4",
-	  "calculate MD5 z/za",
-	  "calculate MD5 z/z1/zb",
-	  "calculate MD5 z/z1/z2/zc",
 	},
-	"Write DataBase test.dst "+dbdir+"/test.dst.db",
 	"Compare Files test.src test.dst", new String[]{
+	  "calculate MD5 test.src c/c3",
+	  "calculate MD5 test.dst c/c3",
+	  "calculate MD5 test.src c/c4",
+	  "calculate MD5 test.dst c/c4",
 	  "copy b",
 	  "copy g1/g2/g3/g",
 	  "copy override c/c2",
@@ -530,9 +511,49 @@ public class FtpTest
 	  "delete z/z1/z2/zc",
 	  "rmdir z/z1/z2",
 	},
+	"Write DataBase test.src "+dbdir+"/test.src.db",
 	"Write DataBase test.dst "+dbdir+"/test.dst.db",
 	"End Backup test.src test.dst",
       });
+  }
+
+  @Test
+  public void testScanRoot()
+  throws Exception
+  {
+    if ( ftpurl == null ) return;
+    File root = tempdir.getRoot();
+    File dbdir = new File(root,"dic");
+
+    String params[] = FtpStorage.parseURL(ftpurl);
+    createFiles(root,new Object[]{
+	"dic", new Object[]{
+	  Backuper.CONFIGXML, new String[]{
+	    "<database>",
+	    "  <storage ftp=\""+params[2]+"\" user=\""+params[0]+"\" password=\""+params[1]+"\" name=\"comb\">",
+	    "    <folder dir=\".\" name=\"comb\">",
+	    "      <folder dir=\"www/blog\" name=\"blog\">",
+	    "        <excludes>",
+	    "          .htaccess",
+	    "          .htpasswd",
+	    "          index.cgi",
+	    "          list.txt",
+	    "          next.cgi",
+	    "        </excludes>",
+	    "      </folder>",
+	    "    </folder>",
+	    "  </storage>",
+	    "</database>",
+	  },
+	},
+      });
+    try ( DataBase db = new DataBase(dbdir.toPath()) ) {
+      db.initializeByXml(dbdir.toPath().resolve(Backuper.CONFIGXML));
+      Iterator<String> itr = Backuper.listDB(db).iterator();
+      assertEquals("blog.comb=ftp://"+params[2]+"/www/blog",itr.next());
+      assertEquals("comb.comb=ftp://"+params[2]+"/",itr.next());
+      assertFalse(itr.hasNext());
+    }
   }
 
   // scanFolder 単体テスト
