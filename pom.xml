@@ -40,7 +40,7 @@
 	  <archive>
 	    <manifest>
 	      <!-- main method name has to be specified -->
-	      <mainClass>mylib.backuper.Backuper</mainClass>
+	      <mainClass>mylib.backuper.Main</mainClass>
 	    </manifest>
 	  </archive>
 	</configuration>

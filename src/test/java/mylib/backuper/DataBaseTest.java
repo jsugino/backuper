@@ -1,6 +1,7 @@
 package mylib.backuper;
 
 import static mylib.backuper.BackuperTest.event;
+import static mylib.backuper.BackuperTest.checkContents;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
@@ -319,7 +320,7 @@ public class DataBaseTest
   throws Exception
   {
     try ( DataBase db = new DataBase(tempdir.getRoot().toPath()) ) {
-      db.initializeByXml(Paths.get(DataBase.class.getClassLoader()
+      Backup bk = db.initializeByXml(Paths.get(DataBase.class.getClassLoader()
 	  .getResource("mylib/backuper/folders.conf.xml").getPath()));
       Iterator<DataBase.Storage> itr = Main.listDB(db).iterator();
       assertEquals("BACKUP.C=/mnt/C/BACKUP",itr.next().toString());
@@ -342,6 +343,21 @@ public class DataBaseTest
       assertEquals("blog.C=/mnt/C/BACKUP/Downloads/5.blog",itr.next().toString());
       assertEquals("blog.comb=ftp://my.host.ne.jp/www/blog",itr.next().toString());
       assertFalse(itr.hasNext());
+      checkContents(bk::dump,new String[]{
+	  "(noname)",
+	  "    blog(C->comb)",
+	  "daily",
+	  "    Common(C->D)",
+	  "    VMs(C->D)",
+	  "    Linux.junsei(SSD->C,D)",
+	  "    Users.junsei(C->D)",
+	  "monthly",
+	  "    Common(C->G)",
+	  "    VMs(C->G)",
+	  "    Linux.junsei(SSD->G)",
+	  "    Users.junsei(C->G)",
+	  "    Users.history(D->G)",
+	});
     }
   }
 }

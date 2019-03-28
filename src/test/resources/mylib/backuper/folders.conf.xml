@@ -56,7 +56,7 @@
     <copy level="monthly" storage="G" />
   </backup>
   <backup name="Linux.junsei">
-    <original storage="STD" />
+    <original storage="SSD" />
     <copy level="daily" storage="C" />
     <copy level="daily" storage="D" />
     <copy level="monthly" storage="G" />
@@ -73,6 +73,12 @@
 
   <backup name="blog">
     <original storage="C" />
-    <copy level="special" storage="comb" />
+    <copy storage="comb" />
   </backup>
+
+  <!--
+  daily    -> { Common(C->D), VMs(C->D), Linux.junsei(STD->C,D), Users.junsei(C->D+history) }
+  monthly  -> { Common(C->G), VMs(C->G), Linux.junsei(STD->G),   Users.junsei(C->G), Users.history(D->G) }
+  (noname) -> { blog(C->comb) }
+  -->
 </database>

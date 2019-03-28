@@ -17,6 +17,7 @@ import org.slf4j.LoggerFactory;
 import mylib.backuper.DataBase.File;
 import mylib.backuper.DataBase.Folder;
 import mylib.backuper.DataBase.Storage;
+import mylib.backuper.Backup.Task;
 
 public class Main
 {
@@ -24,6 +25,7 @@ public class Main
 
   // execute commands
   static enum Command {
+    BACKUP_BY_TASK,
     BACKUP_OR_SCANONLY,
     BACKUP_SKIPSCAN,
     SIMULATE,
@@ -47,20 +49,53 @@ public class Main
   {
     LinkedList<String> args = new LinkedList<>();
     args.addAll(Arrays.asList(argv));
+    try {
+      main(args);
+    } catch ( UsageException ex ) {
+      log.error(ex.getMessage(),ex);
+      System.err.println("usage : java -jar file.jar [-sd] dic.folder src.name [dst.name]");
+      System.err.println("    dic.folder : database folder");
+      System.err.println("    src.name   : source id");
+      System.err.println("    dst.name   : destination id");
+      System.err.println("  Option");
+      System.err.println("    -s         : skip scan DB");
+      System.err.println("    -d         : debug mode (no scan, no copy, no delete)");
+      System.err.println("    -l         : print all definition");
+    } catch ( Exception ex ) {
+      log.error(ex.getMessage(),ex);
+    }
+  }
 
+  public static void main( List<String> args )
+  throws IOException
+  {
     String arg = getArg(args);
 
     Path dbFolder = Paths.get(arg);
 
     try ( DataBase db = new DataBase(dbFolder) ) {
+      Backup backup = null;
       if ( Files.isReadable(dbFolder.resolve(CONFIGXML)) ) {
-	db.initializeByXml(dbFolder.resolve(CONFIGXML));
+	backup = db.initializeByXml(dbFolder.resolve(CONFIGXML));
+	if ( exCommand == Command.BACKUP_OR_SCANONLY ) {
+	  exCommand = Command.BACKUP_BY_TASK;
+	}
       } else if ( Files.isReadable(dbFolder.resolve(CONFIGNAME)) ) {
 	db.initializeByFile(dbFolder.resolve(CONFIGNAME));
       } else {
 	throw new UsageException("no definition file");
       }
       switch ( exCommand ) {
+      case BACKUP_BY_TASK:
+	{
+	  for ( Task task : getTaskList(backup,args) ) {
+	    for ( Storage copy : task.copyStorages ) {
+	      backup(task.origStorage,copy);
+	    }
+	  }
+	}
+	break;
+
       case BACKUP_OR_SCANONLY:
 	{
 	  Storage srcStorage = getStorage(db,args);
@@ -108,31 +143,18 @@ public class Main
 	}
 	break;
       }
-    } catch ( UsageException ex ) {
-      log.error(ex.getMessage(),ex);
-      System.err.println(ex.getMessage());
-      System.err.println("usage : java -jar file.jar [-sd] dic.folder src.name [dst.name]");
-      System.err.println("    dic.folder : database folder");
-      System.err.println("    src.name   : source id");
-      System.err.println("    dst.name   : destination id");
-      System.err.println("  Option");
-      System.err.println("    -s         : skip scan DB");
-      System.err.println("    -d         : debug mode (no scan, no copy, no delete)");
-      System.err.println("    -l         : print all definition");
-    } catch ( Exception ex ) {
-      log.error(ex.getMessage(),ex);
     }
   }
 
-  public static String getArg( LinkedList<String> args )
+  public static String getArg( List<String> args )
   {
     return getArg(args,true);
   }
 
-  public static String getArg( LinkedList<String> args, boolean throwflag )
+  public static String getArg( List<String> args, boolean throwflag )
   {
-    String arg;
-    while ( (arg = args.poll()) != null ) {
+    while ( args.size() > 0 ) {
+      String arg = args.remove(0);
       if ( !checkOpt(arg) ) {
 	if ( args.size() > 0 ) checkOpt(args.get(0));
 	return arg;
@@ -163,18 +185,26 @@ public class Main
     return true;
   }
 
-  public static Storage getStorage( DataBase db, LinkedList<String> args )
+  public static Storage getStorage( DataBase db, List<String> args )
   {
     return getStorage(db,args,true);
   }
 
-  public static Storage getStorage( DataBase db, LinkedList<String> args, boolean throwflag )
+  public static Storage getStorage( DataBase db, List<String> args, boolean throwflag )
   {
     String arg = getArg(args,throwflag);
     if ( arg == null ) return null;
     Storage storage = db.get(arg);
     if ( throwflag && storage == null ) throw new UsageException("Illegal Storage Name : "+arg);
     return storage;
+  }
+
+  public static List<Task> getTaskList( Backup backup, List<String> args )
+  {
+    String arg = getArg(args);
+    List<Task> tasklist = backup.get(arg);
+    if ( tasklist == null ) throw new UsageException("No such task : "+arg);
+    return tasklist;
   }
 
   public static void backup( Storage srcStorage, Storage dstStorage )

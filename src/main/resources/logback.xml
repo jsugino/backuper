@@ -4,7 +4,7 @@
       <level>INFO</level>
     </filter>
     <encoder>
-      <pattern>%msg%n</pattern>
+      <pattern>%msg%nopex%n</pattern>
     </encoder>
   </appender>
   <appender name="FILE" class="ch.qos.logback.core.FileAppender">

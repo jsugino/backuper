@@ -23,7 +23,6 @@ import java.util.HashSet;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.ListIterator;
-import java.util.function.BiConsumer;
 import java.util.function.BiFunction;
 import java.util.regex.Pattern;
 
@@ -568,9 +567,10 @@ public class DataBase extends HashMap<String,DataBase.Storage> implements Closea
     }
   }
 
-  public void initializeByXml( Path descFilePath )
+  public Backup initializeByXml( Path descFilePath )
   throws IOException
   {
+    Backup backup = new Backup();
     try {
       log.trace("initializeByXml : "+descFilePath);
 
@@ -622,6 +622,7 @@ public class DataBase extends HashMap<String,DataBase.Storage> implements Closea
 	    parseFolders(elem.getChildNodes(),name,dir,null,folderdefMap,null,(n,p)->new LocalStorage(this,n,p));
 	  }
 	} else if ( tagname.equals("backup") ) {
+	  backup.registerElem(this,elem);
 	} else {
 	  unknown(elem);
 	}
@@ -630,6 +631,7 @@ public class DataBase extends HashMap<String,DataBase.Storage> implements Closea
       log.error(ex.getMessage(),ex);
       throw new IOException(ex.getMessage(),ex);
     }
+    return backup;
   }
 
   public void parseFolders(
@@ -721,7 +723,7 @@ public class DataBase extends HashMap<String,DataBase.Storage> implements Closea
   public static void unknown( Node node )
   throws IOException, TransformerException
   {
-    nodeerror("unknown XML element",node);
+    nodeerror("unknown element",node);
   }
 
   public static void nodeerror( String message, Node node )
