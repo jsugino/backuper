@@ -1,22 +1,23 @@
 package mylib.backuper;
 
-import static mylib.backuper.BackuperTest.event;
 import static mylib.backuper.BackuperTest.checkContents;
+import static mylib.backuper.BackuperTest.event;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 
 import java.io.File;
 import java.nio.file.Paths;
-import java.util.Iterator;
-import java.util.List;
 import java.util.regex.Pattern;
+import java.util.stream.Collectors;
 
 import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.rules.TemporaryFolder;
+
+import mylib.backuper.DataBase.Storage;
 
 public class DataBaseTest
 {
@@ -320,29 +321,34 @@ public class DataBaseTest
   throws Exception
   {
     try ( DataBase db = new DataBase(tempdir.getRoot().toPath()) ) {
-      Backup bk = db.initializeByXml(Paths.get(DataBase.class.getClassLoader()
-	  .getResource("mylib/backuper/folders.conf.xml").getPath()));
-      Iterator<DataBase.Storage> itr = Main.listDB(db).iterator();
-      assertEquals("BACKUP.C=/mnt/C/BACKUP",itr.next().toString());
-      assertEquals("Common.C=/mnt/C/BACKUP/Common",itr.next().toString());
-      assertEquals("Common.D=/mnt/D/Common",itr.next().toString());
-      assertEquals("Common.G=/run/media/junsei/HD-LBU3/Common",itr.next().toString());
-      assertEquals("Linux.junsei.C=/mnt/C/BACKUP/Linux/home/junsei",itr.next().toString());
-      assertEquals("Linux.junsei.D=/mnt/D/Linux/home/junsei",itr.next().toString());
-      assertEquals("Linux.junsei.G=/run/media/junsei/HD-LBU3/Linux/home/junsei",itr.next().toString());
-      assertEquals("Linux.junsei.SSD=/home/junsei",itr.next().toString());
-      assertEquals("Users.history.D=/mnt/D/Users.history",itr.next().toString());
-      assertEquals("Users.history.G=/run/media/junsei/HD-LBU3/Users.history",itr.next().toString());
-      assertEquals("Users.history.junsei.D=/mnt/D/Users.history/junsei",itr.next().toString());
-      assertEquals("Users.junsei.C=/mnt/C/Users/junsei",itr.next().toString());
-      assertEquals("Users.junsei.D=/mnt/D/Users/junsei",itr.next().toString());
-      assertEquals("Users.junsei.G=/run/media/junsei/HD-LBU3/Users/junsei",itr.next().toString());
-      assertEquals("VMs.C=/mnt/C/BACKUP/Virtual Machines",itr.next().toString());
-      assertEquals("VMs.D=/mnt/D/Virtual Machines",itr.next().toString());
-      assertEquals("VMs.G=/run/media/junsei/HD-LBU3/Virtual Machines",itr.next().toString());
-      assertEquals("blog.C=/mnt/C/BACKUP/Downloads/5.blog",itr.next().toString());
-      assertEquals("blog.comb=ftp://my.host.ne.jp/www/blog",itr.next().toString());
-      assertFalse(itr.hasNext());
+      String def = DataBase.class
+	.getClassLoader()
+	.getResource("mylib/backuper/folders.conf.xml")
+	.getPath();
+      Backup bk = db.initializeByXml(Paths.get(def));
+      checkContents(
+	Main.listDB(db).stream().map(Storage::toString).collect(Collectors.toList()),
+	new String[]{
+	  "BACKUP.C=/mnt/C/BACKUP",
+	  "Common.C=/mnt/C/BACKUP/Common",
+	  "Common.D=/mnt/D/Common",
+	  "Common.G=/run/media/junsei/HD-LBU3/Common",
+	  "Linux.junsei.C=/mnt/C/BACKUP/Linux/home/junsei",
+	  "Linux.junsei.D=/mnt/D/Linux/home/junsei",
+	  "Linux.junsei.G=/run/media/junsei/HD-LBU3/Linux/home/junsei",
+	  "Linux.junsei.SSD=/home/junsei",
+	  "Users.history.D=/mnt/D/Users.history",
+	  "Users.history.G=/run/media/junsei/HD-LBU3/Users.history",
+	  "Users.history.junsei.D=/mnt/D/Users.history/junsei",
+	  "Users.junsei.C=/mnt/C/Users/junsei",
+	  "Users.junsei.D=/mnt/D/Users/junsei",
+	  "Users.junsei.G=/run/media/junsei/HD-LBU3/Users/junsei",
+	  "VMs.C=/mnt/C/BACKUP/Virtual Machines",
+	  "VMs.D=/mnt/D/Virtual Machines",
+	  "VMs.G=/run/media/junsei/HD-LBU3/Virtual Machines",
+	  "blog.C=/mnt/C/BACKUP/Downloads/5.blog",
+	  "blog.comb=ftp://my.host.ne.jp/www/blog",
+	});
       checkContents(bk::dump,new String[]{
 	  "(noname)",
 	  "    blog(C->comb)",
@@ -350,7 +356,7 @@ public class DataBaseTest
 	  "    Common(C->D)",
 	  "    VMs(C->D)",
 	  "    Linux.junsei(SSD->C,D)",
-	  "    Users.junsei(C->D)",
+	  "    Users.junsei(C->D(Users.history.junsei.D))",
 	  "monthly",
 	  "    Common(C->G)",
 	  "    VMs(C->G)",

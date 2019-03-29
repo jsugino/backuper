@@ -187,7 +187,7 @@ public class FtpStorage extends Storage
   }
 
   @Override
-  public void makeDirectory( Path path )
+  public void makeRealDirectory( Path path )
   throws IOException
   {
     if ( !connect() ) return;
@@ -265,7 +265,7 @@ public class FtpStorage extends Storage
   }
 
   @Override
-  public void setLastModified( Path path, long time )
+  public void setRealLastModified( Path path, long time )
   throws IOException
   {
     if ( !connect() ) return;
@@ -303,6 +303,13 @@ public class FtpStorage extends Storage
 	+", result = "+result
 	+", code = "+ftpclient.getReplyCode()
 	+", message = "+ftpclient.getReplyString());
+  }
+
+  @Override
+  public void moveRealFile( Path fromPath, Path toPath )
+  throws IOException
+  {
+    throw new IOException("not implemented : fromPath = "+fromPath+", toPath = "+toPath);
   }
 
   @Override

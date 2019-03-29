@@ -19,6 +19,9 @@ import mylib.backuper.DataBase.Folder;
 import mylib.backuper.DataBase.Storage;
 import mylib.backuper.Backup.Task;
 
+import static mylib.backuper.DataBase.findFromList;
+import static mylib.backuper.DataBase.registerToList;
+
 public class Main
 {
   private final static Logger log = LoggerFactory.getLogger(Main.class);
@@ -90,7 +93,8 @@ public class Main
 	{
 	  for ( Task task : getTaskList(backup,args) ) {
 	    for ( Storage copy : task.copyStorages ) {
-	      backup(task.origStorage,copy);
+	      Storage his = task.historyStorages.get(copy.storageName);
+	      backup(task.origStorage,copy,his);
 	    }
 	  }
 	}
@@ -210,6 +214,12 @@ public class Main
   public static void backup( Storage srcStorage, Storage dstStorage )
   throws IOException
   {
+    backup(srcStorage,dstStorage,null);
+  }
+
+  public static void backup( Storage srcStorage, Storage dstStorage, Storage hisStorage )
+  throws IOException
+  {
     log.info("Start Backup "+srcStorage.storageName+" "+dstStorage.storageName);
     srcStorage.readDB();
     if ( exCommand == Command.BACKUP_SKIPSCAN ) {
@@ -225,18 +235,30 @@ public class Main
       dstStorage.scanFolder();
     }
 
+    if ( hisStorage != null ) {
+      hisStorage.readDB();
+      if ( exCommand == Command.BACKUP_SKIPSCAN ) {
+	hisStorage.complementFolders();
+      } else {
+	hisStorage.scanFolder();
+      }
+    }
+
     log.debug("Compare Files "+srcStorage.storageName+" "+dstStorage.storageName);
     long unit = Math.max(srcStorage.timeUnit(),dstStorage.timeUnit());
     LinkedList<File> frlist = toFileList(srcStorage); // ソートされたListに変換
     LinkedList<File> tolist = toFileList(dstStorage); // ソートされたListに変換
-    LinkedList<File> difftimelist = new LinkedList<>();
-    LinkedList<File> copylist = compare(frlist,tolist,difftimelist,unit); // frlist, tolist にはそれ以外が残る。
+    LinkedList<Path> difflist = compare(frlist,tolist,unit); // frlist, tolist にはそれ以外が残る。
 
     // tolist means "delete"
     log.trace("start delete from "+dstStorage.getRoot());
     for ( File file : tolist ) {
       //file.dump(System.err);
-      dstStorage.deleteFile(file.filePath);
+      if ( hisStorage != null ) {
+	dstStorage.moveHistoryFile(file.filePath,hisStorage);
+      } else {
+	dstStorage.deleteFile(file.filePath);
+      }
     }
 
     // delete empty folder
@@ -269,30 +291,98 @@ public class Main
     log.trace("start copy from "+srcStorage.getRoot()+" to "+dstStorage.getRoot());
     for ( File file : frlist ) {
       //file.dump(System.err);
-      srcStorage.copyFile(file.filePath,dstStorage,false);
-    }
+      log.info("copy "+file.filePath);
 
-    // copylist means "copy override"
-    log.trace("start copy override from "+srcStorage.getRoot()+" to "+dstStorage.getRoot());
-    for ( File file : copylist ) {
-      //file.dump(System.err);
-      srcStorage.copyFile(file.filePath,dstStorage,true);
-    }
+      Path parentPath = file.filePath.getParent();
+      if ( parentPath == null ) parentPath = Paths.get(".");
+      Folder dstFolder = dstStorage.getFolder(parentPath);
 
-    // set lastModifed
-    for ( File file : difftimelist ) {
-      log.info("set lastModified "+file.filePath);
-      Folder dstFolder = DataBase.findFromList(dstStorage.folders,file.filePath.getParent());
-      File dstFile = DataBase.findFromList(dstFolder.files,file.filePath);
+      String hashValue = srcStorage.copyRealFile(file.filePath,dstStorage);
+      dstStorage.setRealLastModified(file.filePath,file.lastModified);
+
+      File dstFile = new File(file.filePath);
+      registerToList(dstFolder.files,dstFile);
+      dstFile.length = file.length;
       dstFile.lastModified = file.lastModified/unit*unit;
-      dstStorage.setLastModified(file.filePath,file.lastModified);
+      dstFile.hashValue = file.hashValue = hashValue;
+    }
+
+    // difflist means "set lastModifed" or "copy override" or "do nothing"
+    log.trace("start check difflist from "+srcStorage.getRoot()+" to "+dstStorage.getRoot());
+    for ( Path filePath : difflist ) {
+      copyFile(srcStorage,dstStorage,filePath,hisStorage);
     }
 
     // write DB
     srcStorage.writeDB();
     dstStorage.writeDB();
+    if ( hisStorage != null ) {
+      hisStorage.writeDB();
+    }
 
     log.info("End Backup "+srcStorage.storageName+" "+dstStorage.storageName);
+  }
+
+  public static void copyFile( Storage srcStorage, Storage dstStorage, Path filePath, Storage hisStorage )
+  throws IOException
+  {
+    log.trace("copyFile srcStorage = "+srcStorage.storageName
+      +", dstStorage = "+dstStorage.storageName
+      +", filePath = "+filePath
+      +", hisStorage = "+(hisStorage == null ? "(null)" : hisStorage.storageName));
+    Path parentPath = filePath.getParent();
+    if ( parentPath == null ) parentPath = Paths.get(".");
+    Folder srcFolder = findFromList(srcStorage.folders,parentPath);
+    File   srcFile   = findFromList(srcFolder.files,filePath);
+    Folder dstFolder = dstStorage.getFolder(parentPath);
+    File   dstFile   = findFromList(dstFolder.files,filePath);
+    long   unit      = Math.max(srcStorage.timeUnit(),dstStorage.timeUnit());
+    int type = 0;
+
+    if ( srcFile.length == dstFile.length ) {
+      log.trace("same length");
+      if ( srcFile.hashValue == null ) srcFile.hashValue = srcStorage.getMD5(filePath);
+      if ( dstFile.hashValue == null ) dstFile.hashValue = dstStorage.getMD5(filePath);
+      if ( srcFile.hashValue.equals(dstFile.hashValue) ) {
+	log.trace("same hashValue");
+	if ( srcFile.lastModified/unit != dstFile.lastModified/unit ) {
+	  log.trace("diff lastModified");
+	  log.info("set lastModified "+dstFile.filePath);
+	  dstFile.lastModified = srcFile.lastModified/unit*unit;
+	  dstStorage.setRealLastModified(dstFile.filePath,dstFile.lastModified);
+	}
+	return;
+      }
+    }
+    log.trace("copy file");
+    if ( hisStorage != null ) {
+      dstStorage.moveHistoryFile(filePath,hisStorage);
+      dstFile = new File(srcFile.filePath,srcFile.lastModified,srcFile.length);
+      registerToList(dstFolder.files,dstFile);
+      log.info("copy "+filePath);
+      String hashValue = srcStorage.copyRealFile(filePath,dstStorage);
+      if ( srcFile.hashValue != null && !srcFile.hashValue.equals(hashValue) )
+	log.warn("different hashValue : "+filePath
+	  +", orig = "+srcFile.hashValue
+	  +", new = "+hashValue
+	  +", storage = "+srcStorage.storageName);
+      dstFile.hashValue = srcFile.hashValue = hashValue;
+      dstStorage.setRealLastModified(dstFile.filePath,dstFile.lastModified);
+    } else {
+      log.info("delete "+filePath);
+      dstStorage.deleteRealFile(filePath);
+      log.info("copy "+filePath);
+      String hashValue = srcStorage.copyRealFile(filePath,dstStorage);
+      dstFile.length = srcFile.length;
+      if ( srcFile.hashValue != null && !srcFile.hashValue.equals(hashValue) )
+	log.warn("different hashValue : "+filePath
+	  +", orig = "+srcFile.hashValue
+	  +", new = "+hashValue
+	  +", storage = "+srcStorage.storageName);
+      dstFile.hashValue = srcFile.hashValue = hashValue;
+      dstFile.lastModified = srcFile.lastModified/unit*unit;
+      dstStorage.setRealLastModified(dstFile.filePath,dstFile.lastModified);
+    }
   }
 
   public static void refresh( Storage storage )
@@ -317,8 +407,7 @@ public class Main
     long unit = Math.max(srcStorage.timeUnit(),dstStorage.timeUnit());
     LinkedList<File> frlist = toFileList(srcStorage); // ソートされたListに変換
     LinkedList<File> tolist = toFileList(dstStorage); // ソートされたListに変換
-    LinkedList<File> difftimelist = new LinkedList<>();
-    LinkedList<File> copylist = compare(frlist,tolist,difftimelist,unit); // frlist, tolist にはそれ以外が残る。
+    LinkedList<Path> difflist = compare(frlist,tolist,unit); // frlist, tolist にはそれ以外が残る。
 
     // tolist means "delete"
     log.trace("simulate delete from "+dstStorage.getRoot());
@@ -332,15 +421,10 @@ public class Main
       log.info("copy "+file.filePath);
     }
 
-    // copylist means "copy override"
+    // difflist means "set lastModifed" or "copy override" or "do nothing"
     log.trace("simulate copy override from "+srcStorage.getRoot()+" to "+dstStorage.getRoot());
-    for ( File file : copylist ) {
-      log.info("copy override "+file.filePath);
-    }
-
-    // set lastModifed
-    for ( File file : difftimelist ) {
-      log.info("set lastModified "+file.filePath);
+    for ( Path path : difflist ) {
+      log.info("copy override "+path);
     }
 
     log.info("End Simulation "+srcStorage.storageName+" "+dstStorage.storageName);
@@ -379,9 +463,9 @@ public class Main
     return list;
   }
 
-  public static LinkedList<File> compare( LinkedList<File> frlist, LinkedList<File> tolist, LinkedList<File> difftimelist, long unit )
+  public static LinkedList<Path> compare( LinkedList<File> frlist, LinkedList<File> tolist, long unit )
   {
-    LinkedList<File> copylist = new LinkedList<>();
+    LinkedList<Path> difflist = new LinkedList<>();
     ListIterator<File> fritr = frlist.listIterator();
     ListIterator<File> toitr = tolist.listIterator();
     while ( fritr.hasNext() && toitr.hasNext() ) {
@@ -392,11 +476,10 @@ public class Main
       if ( cmp == 0 ) {
 	if (
 	  frfile.hashValue == null || tofile.hashValue == null || 
-	  !frfile.hashValue.equals(tofile.hashValue)
+	  !frfile.hashValue.equals(tofile.hashValue) ||
+	  frfile.lastModified/unit != tofile.lastModified/unit
 	) {
-	  copylist.add(frfile);
-	} else if ( frfile.lastModified/unit != tofile.lastModified/unit ) {
-	  difftimelist.add(frfile);
+	  difflist.add(frfile.filePath);
 	}
 	fritr.remove();
 	toitr.remove();
@@ -406,6 +489,6 @@ public class Main
 	fritr.previous();
       }
     }
-    return copylist;
+    return difflist;
   }
 }

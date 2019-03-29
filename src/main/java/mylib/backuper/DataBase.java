@@ -50,6 +50,7 @@ public class DataBase extends HashMap<String,DataBase.Storage> implements Closea
   private final static Logger log = LoggerFactory.getLogger(DataBase.class);
 
   public final static SimpleDateFormat STDFORMAT = new SimpleDateFormat("yyyy/MM/dd HH:mm:ss.SSS");
+  public final static SimpleDateFormat TFORM = new SimpleDateFormat("yyyyMMddHHmmss");
 
   // ======================================================================
   public abstract class Storage implements Closeable
@@ -69,13 +70,13 @@ public class DataBase extends HashMap<String,DataBase.Storage> implements Closea
 
     public abstract String getRoot();
 
-    public abstract void makeDirectory( Path path ) throws IOException;
+    public abstract void makeRealDirectory( Path path ) throws IOException;
 
     public abstract InputStream newInputStream( Path path ) throws IOException;
 
     public abstract OutputStream newOutputStream( Path path ) throws IOException;
 
-    public abstract void setLastModified( Path path, long time ) throws IOException;
+    public abstract void setRealLastModified( Path path, long time ) throws IOException;
 
     public abstract List<PathHolder> getPathHolderList( Path path ) throws IOException;
 
@@ -83,8 +84,16 @@ public class DataBase extends HashMap<String,DataBase.Storage> implements Closea
 
     public abstract void deleteRealFolder( Path path ) throws IOException;
 
+    public abstract void moveRealFile( Path fromPath, Path toPath ) throws IOException;
+
     // --------------------------------------------------
     public Folder getFolder( Path path )
+    throws IOException
+    {
+      return getFolder(path,null);
+    }
+
+    public Folder getFolder( Path path, String name )
     throws IOException
     {
       log.trace("getFolder : "+path);
@@ -94,8 +103,9 @@ public class DataBase extends HashMap<String,DataBase.Storage> implements Closea
 	folder = new Folder(path);
 	registerToList(folders,folder);
 	getFolder(path.getParent());
-	log.info("mkdir "+path);
-	makeDirectory(path);
+	name = name == null ? "" : name+" ";
+	log.info("mkdir "+name+path);
+	makeRealDirectory(path);
       }
       return folder;
     }
@@ -195,46 +205,18 @@ public class DataBase extends HashMap<String,DataBase.Storage> implements Closea
     }
 
     // --------------------------------------------------
-    public void copyFile( Path filePath, Storage dstStorage, boolean override )
+    public String copyRealFile( Path filePath, Storage dstStorage )
     throws IOException
     {
-      log.trace("copyFile "+filePath);
       Storage srcStorage = this;
-      Path parentPath = filePath.getParent();
-      if ( parentPath == null ) parentPath = Paths.get(".");
-      Folder srcFolder = findFromList(srcStorage.folders,parentPath);
-      File   srcFile   = findFromList(srcFolder.files,filePath);
-      Folder dstFolder = dstStorage.getFolder(parentPath);
-      File   dstFile   = findFromList(dstFolder.files,filePath);
-      String command   = override ? "copy override " : "copy ";
-      long   unit      = Math.max(srcStorage.timeUnit(),dstStorage.timeUnit());
-      if ( dstFile == null ) {
-	if ( override ) throw new IOException("Override is requested, but the file is not existed : "+filePath );
-	dstFile = new File(filePath);
-	registerToList(dstFolder.files,dstFile);
-      } else {
-	if ( !override ) throw new IOException("Override is not requested, but the file is existed : "+filePath );
-      }
+      log.trace("copyRealFile "+filePath
+	+", srcStorage = "+srcStorage.storageName
+	+", dstStorage = "+dstStorage.storageName);
 
-      if ( override && srcFile.length == dstFile.length ) {
-	if ( srcFile.hashValue == null ) srcFile.hashValue = this.getMD5(srcFile.filePath);
-	if ( dstFile.hashValue == null ) dstFile.hashValue = dstStorage.getMD5(dstFile.filePath);
-	if ( srcFile.hashValue.equals(dstFile.hashValue) ) {
-	  if ( srcFile.lastModified/unit != dstFile.lastModified/unit ) {
-	    log.info("set lastModified "+dstFile.filePath);
-	    dstFile.lastModified = srcFile.lastModified/unit*unit;
-	    dstFile.length = srcFile.length;
-	    dstStorage.setLastModified(dstFile.filePath,dstFile.lastModified);
-	  }
-	  return;
-	}
-      }
-
-      log.info(command+filePath);
       digest.reset();
       try ( 
-	InputStream  in  = this.newInputStream(srcFile.filePath);
-	OutputStream out = dstStorage.newOutputStream(dstFile.filePath);
+	InputStream  in  = srcStorage.newInputStream(filePath);
+	OutputStream out = dstStorage.newOutputStream(filePath);
       ) {
 	byte buf[] = new byte[1024*64];
 	int len;
@@ -243,15 +225,7 @@ public class DataBase extends HashMap<String,DataBase.Storage> implements Closea
 	  digest.update(buf,0,len);
 	}
       }
-      String md5 = getDigestString();
-      if ( srcFile.hashValue != null && !srcFile.hashValue.equals(md5) ) {
-	log.warn("different MD5 : path = "+srcFile.filePath
-	  +", orig = "+srcFile.hashValue+", new = "+md5);
-      }
-      dstFile.length = srcFile.length;
-      dstFile.lastModified = srcFile.lastModified/unit*unit;
-      dstFile.hashValue = srcFile.hashValue = md5;
-      dstStorage.setLastModified(dstFile.filePath,dstFile.lastModified);
+      return getDigestString();
     }
 
     public void deleteFile( Path delPath )
@@ -263,6 +237,41 @@ public class DataBase extends HashMap<String,DataBase.Storage> implements Closea
       if ( parentPath == null ) parentPath = Paths.get(".");
       Folder folder = findFromList(this.folders,parentPath);
       deleteFromList(folder.files,delPath);
+    }
+
+    public void moveHistoryFile( Path filePath, Storage dstStorage )
+    throws IOException
+    {
+      Storage srcStorage = this;
+      log.trace("moveHistoryFile "+filePath
+	+", srcStorage = "+srcStorage.storageName
+	+", dstStorage = "+dstStorage.storageName);
+      Path parentPath = filePath.getParent();
+      if ( parentPath == null ) parentPath = Paths.get(".");
+      Folder srcFolder = findFromList(srcStorage.folders,parentPath);
+      File   srcFile   = findFromList(srcFolder.files,filePath);
+      Folder dstFolder = dstStorage.getFolder(parentPath,dstStorage.storageName);
+      Path   histPath  = toHistPath(filePath,srcFile.lastModified);
+      File   dstFile   = findFromList(dstFolder.files,histPath);
+      if ( dstFile != null ) throw new IOException("already existed "+dstFile.filePath);
+
+      deleteFromList(srcFolder.files,srcFile.filePath);
+      (dstFile = srcFile).filePath = histPath;
+      registerToList(dstFolder.files,dstFile);
+
+      Path newPath = Paths.get(srcStorage.getRoot()).relativize(Paths.get(dstStorage.getRoot())).resolve(histPath);
+      log.info("move "+filePath+" "+dstStorage.storageName+" "+histPath);
+      srcStorage.moveRealFile(filePath,newPath);
+    }
+
+    public Path toHistPath( Path filePath, long lastModified )
+    {
+      Path parentPath = filePath.getParent();
+      String name = filePath.getFileName().toString();
+      int idx = name.lastIndexOf('.');
+      String time = TFORM.format(new Date(lastModified));
+      name = ( idx <= 0 ) ? name+'-'+time : name.substring(0,idx)+'-'+time+name.substring(idx);
+      return parentPath == null ? Paths.get(name) : parentPath.resolve(name);
     }
 
     /**
@@ -463,6 +472,7 @@ public class DataBase extends HashMap<String,DataBase.Storage> implements Closea
     public File( Path filePath )
     {
       this.filePath = filePath;
+      this.type = FileType.NORMAL;
     }
 
     public File( Path filePath, long lastModified, long length )

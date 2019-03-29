@@ -31,6 +31,7 @@ public class Backup extends HashMap<String,List<Backup.Task>>
     String name;
     Storage origStorage;
     LinkedList<Storage> copyStorages = new LinkedList<>();
+    HashMap<String,Storage> historyStorages = new HashMap<>();
 
     public Task( String name, Storage origStorage )
     {
@@ -50,40 +51,56 @@ public class Backup extends HashMap<String,List<Backup.Task>>
     for ( int i = 0; i < list.getLength(); ++i ) {
       Element copy = selectElement(list.item(i));
       if ( copy == null ) continue;
+
       if ( copy.getTagName().equals("original") ) {
-	if ( origStorage != null ) { nodeerror("too many original tag",copy); continue; }
+	if ( origStorage != null ) {
+	  nodeerror("too many original tag",copy); continue; }
 	origStorage = getAttr(copy,"storage");
-	if ( origStorage == null ) { attrerror("storage",copy); continue; }
+	if ( origStorage == null ) {
+	  attrerror("storage",copy); continue; }
+
       } else if ( copy.getTagName().equals("copy") ) {
+	if ( origStorage == null ) {
+	  nodeerror("no original tag before copy tag",copy); continue; }
+
 	String storage = getAttr(copy,"storage");
+	if ( storage == null ) {
+	  attrerror("storage",copy); continue; }
+
 	String level = getAttr(copy,"level");
-	if ( storage == null ) { attrerror("storage",copy); continue; }
 	if ( level == null ) { level = "(noname)"; }
-	if ( origStorage == null ) { nodeerror("no original tag before copy tag",copy); }
+
+	String history = getAttr(copy,"history");
+
 	List<Task> tasklist = get(level);
-	if ( tasklist == null ) {
-	  tasklist = new LinkedList<Task>();
-	  put(level,tasklist);
-	}
+	if ( tasklist == null ) put(level,tasklist = new LinkedList<Task>());
+
+	String strName;
+	Storage strg;
 	for ( String name : names ) {
-	  Task task = null;
-	  for ( Task tk : tasklist ) {
-	    if ( tk.name.equals(name) ) {
-	      task = tk;
-	      break;
-	    }
-	  }
+	  Task task = tasklist.stream().filter(tk->tk.name.equals(name)).findFirst().orElse(null);
 	  if ( task == null ) {
-	    String strName = name+'.'+origStorage;
-	    Storage strg = db.get(strName);
-	    if ( strg == null ) { nodeerror("no such storage "+strName,copy); continue; }
-	    task = new Task(name,strg);
-	    tasklist.add(task);
+	    strg = db.get(strName = name+'.'+origStorage);
+	    if ( strg == null ) {
+	      nodeerror("no such storage "+strName,copy); continue; }
+	    tasklist.add(task = new Task(name,strg));
 	  }
-	  String strName = name+'.'+storage;
-	  Storage strg = db.get(strName);
-	  if ( strg == null ) { nodeerror("no such storage "+strName,copy); continue; }
+	  strg = db.get(strName = name+'.'+storage);
+	  if ( strg == null ) {
+	    nodeerror("no such storage "+strName,copy); continue; }
+	  if ( task.copyStorages.contains(strg) ) {
+	    nodeerror("already exists same copy "+strName,copy); continue; }
 	  task.copyStorages.add(strg);
+
+	  if ( history != null ) {
+	    String hisName = strName;
+	    strg = db.get(strName = history+'.'+storage);
+	    if ( strg == null ) {
+	      nodeerror("no such storage "+strName,copy); continue; }
+	    if ( task.historyStorages.get(hisName) != null ) {
+	      nodeerror("already exists same history "+hisName,copy); continue; }
+	    task.historyStorages.put(hisName,strg);
+	  }
 	}
       } else {
 	nodeerror("unknown element",copy);
@@ -104,6 +121,8 @@ public class Backup extends HashMap<String,List<Backup.Task>>
 	String delim = "->";
 	for ( Storage sto : task.copyStorages ) {
 	  out.print(delim+sto.storageName.substring(len));
+	  Storage his = task.historyStorages.get(sto.storageName);
+	  if ( his != null ) out.print("("+his.storageName+")");
 	  delim = ",";
 	}
 	out.println(")");

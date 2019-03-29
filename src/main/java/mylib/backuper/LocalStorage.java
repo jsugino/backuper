@@ -6,6 +6,7 @@ import java.io.OutputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.nio.file.StandardOpenOption;
 import java.nio.file.attribute.FileTime;
 import java.util.LinkedList;
 import java.util.List;
@@ -46,7 +47,7 @@ public class LocalStorage extends Storage
   }
 
   @Override
-  public void makeDirectory( Path path )
+  public void makeRealDirectory( Path path )
   throws IOException
   {
     Files.createDirectory(rootFolder.resolve(path));
@@ -63,11 +64,11 @@ public class LocalStorage extends Storage
   public OutputStream newOutputStream( Path path )
   throws IOException
   {
-    return Files.newOutputStream(rootFolder.resolve(path));
+    return Files.newOutputStream(rootFolder.resolve(path),StandardOpenOption.CREATE_NEW);
   }
 
   @Override
-  public void setLastModified( Path path, long time )
+  public void setRealLastModified( Path path, long time )
   throws IOException
   {
     Files.setLastModifiedTime(rootFolder.resolve(path),FileTime.fromMillis(time));
@@ -118,17 +119,12 @@ public class LocalStorage extends Storage
     Files.delete(full);
   }
 
-  /*
-  public boolean isSymbolicLink( Path relpath )
+  @Override
+  public void moveRealFile( Path fromPath, Path toPath )
+  throws IOException
   {
-    return Files.isSymbolicLink(rootFolder.resolve(relpath));
+    Files.move(rootFolder.resolve(fromPath).normalize(),rootFolder.resolve(toPath).normalize());
   }
-
-  public boolean isDirectory( Path relpath )
-  {
-    return Files.isDirectory(rootFolder.resolve(relpath));
-  }
-  */
 
   @Override
   public String toString()

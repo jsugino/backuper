@@ -29,7 +29,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.function.Consumer;
 import java.util.stream.Collectors;
-import java.util.stream.IntStream;
 import java.util.stream.Stream;
 
 import org.junit.Before;
@@ -44,6 +43,9 @@ import ch.qos.logback.classic.Level;
 import ch.qos.logback.classic.spi.ILoggingEvent;
 import ch.qos.logback.core.Appender;
 import ch.qos.logback.core.read.ListAppender;
+
+import mylib.backuper.Backup.Task;
+import mylib.backuper.DataBase.Storage;
 
 public class BackuperTest
 {
@@ -291,7 +293,8 @@ public class BackuperTest
 	  "calculate MD5 test.dst c/c4",
 	  "copy b",
 	  "copy g1/g2/g3/g",
-	  "copy override c/c2",
+	  "delete c/c2",
+	  "copy c/c2",
 	  "set lastModified c/c4",
 	  "copy c/d/d",
 	  "mkdir c/d",
@@ -549,7 +552,8 @@ public class BackuperTest
 	  "calculate MD5 test.src 3",
 	  "calculate MD5 test.dst 1",
 	  "calculate MD5 test.dst 3",
-	  "copy override 2",
+	  "delete 2",
+	  "copy 2",
 	},
 	"Write DataBase test.src "+dbdir+"/test.src.db",
       });
@@ -640,15 +644,26 @@ public class BackuperTest
     File dbdir = new File(root,"dic");
     File srcdir = new File(root,"src");
     File dstdir = new File(root,"dst");
-    File histdir = new File(root,"hist");
+    File hisdir = new File(root,"his");
     long current = System.currentTimeMillis() - 10000L;
 
     // prepareSimple()
     createFiles(root,new Object[]{
 	"dic", new Object[]{
-	  Main.CONFIGNAME, new String[]{
-	    "test.src="+srcdir.getAbsolutePath(),
-	    "test.dst="+dstdir.getAbsolutePath(),
+	  Main.CONFIGXML, new String[]{
+	    "<database>",
+	    "  <storage dir=\""+tempdir.getRoot()+"\" name=\"src\">",
+	    "    <folder dir=\"src\" name=\"test\"/>",
+	    "  </storage>",
+	    "  <storage dir=\""+tempdir.getRoot()+"\" name=\"dst\">",
+	    "    <folder dir=\"dst\" name=\"test\"/>",
+	    "    <folder dir=\"his\" name=\"hist\"/>",
+	    "  </storage>",
+	    "  <backup name=\"test\">",
+	    "    <original storage=\"src\" />",
+	    "    <copy level=\"daily\" storage=\"dst\" history=\"hist\" />",
+	    "  </backup>",
+	    "</database>",
 	  },
 	},
 	"src", new Object[]{
@@ -675,8 +690,10 @@ public class BackuperTest
 	    "3", "", current+5*min,
 	  },
 	},
+	"his", new Object[]{},
       });
-    DataBase db = execute(root,dbdir);
+
+    DataBase db = execute(root,dbdir,true);
 
     compareFiles(dstdir,new Object[]{
 	"1", "", current,
@@ -691,42 +708,46 @@ public class BackuperTest
 	},
       });
 
-    // ToDo: 本来、次のは成功するはず。
-    /*
-    compareFiles(histdir,new Object[]{
-	"3-hist", "", current+1*min,
-	"4-hist", "", current+2*min,
+    compareFiles(hisdir,new Object[]{
+	"3-"+hist(current+1*min), "", current+1*min,
+	"4-"+hist(current+2*min), "", current+2*min,
 	"5", new Object[]{
-	  "1-hist", "", current,
+	  "1-"+hist(current+3*min), "", current+3*min,
 	},
 	"6", new Object[]{
-	  "2-hist", "def", current,
-	  "3-hist", "", current,
+	  "2-"+hist(current+4*min), "def", current+4*min,
+	  "3-"+hist(current+5*min), "", current+5*min,
 	},
       });
-    */
 
     checkEvent(new Object[]{
 	"Compare Files test.src test.dst",new String[]{
-	  // ToDo: 今は、次のようになってしまう。履歴の保存時のアクションも追加する必要がある。
 	  "calculate MD5 test.src 2",
 	  "calculate MD5 test.src 6/2",
 	  "calculate MD5 test.dst 2",
 	  "calculate MD5 test.dst 6/2",
 	  "copy 1",
-	  "delete 3",
-	  "delete 4",
+	  "move 3 hist.dst 3-"+hist(current+1*min),
+	  "move 4 hist.dst 4-"+hist(current+2*min),
 	  "mkdir 4",
 	  "copy 4/1",
-	  "delete 5/1",
+	  "mkdir hist.dst 5",
+	  "move 5/1 hist.dst 5/1-"+hist(current+3*min),
 	  "rmdir 5",
 	  "copy 5",
 	  "copy 6/1",
-	  "copy override 6/2",
-	  "delete 6/3",
+	  "mkdir hist.dst 6",
+	  "move 6/2 hist.dst 6/2-"+hist(current+4*min),
+	  "copy 6/2",
+	  "move 6/3 hist.dst 6/3-"+hist(current+5*min),
 	},
 	"Write DataBase test.src "+dbdir+"/test.src.db",
       });
+  }
+
+  public static String hist( long time )
+  {
+    return DataBase.TFORM.format(new Date(time));
   }
 
   @Test
@@ -737,7 +758,7 @@ public class BackuperTest
     File dbdir = new File(root,"dic");
     File srcdir = new File(root,"src");
     File dstdir = new File(root,"dst");
-    File histdir = new File(root,"hist");
+    File hisdir = new File(root,"his");
     long current = System.currentTimeMillis()/min*min - 3*min;
 
     // prepareMove()
@@ -750,7 +771,12 @@ public class BackuperTest
 	    "  </storage>",
 	    "  <storage dir=\""+tempdir.getRoot()+"\" name=\"dst\">",
 	    "    <folder dir=\"dst\" name=\"test\"/>",
+	    "    <folder dir=\"his\" name=\"hist\"/>",
 	    "  </storage>",
+	    "  <backup name=\"test\">",
+	    "    <original storage=\"src\" />",
+	    "    <copy level=\"daily\" storage=\"dst\" history=\"hist\" />",
+	    "  </backup>",
 	    "</database>",
 	  },
 	},
@@ -771,6 +797,7 @@ public class BackuperTest
 	    "0", "", current+2*min,
 	  },
 	},
+	"his", new Object[]{},
       });
 
     DataBase db = execute(root,dbdir,true);
@@ -783,14 +810,14 @@ public class BackuperTest
 	},
       });
 
-    /* ToDo: 次のものもできるようにする。
-    compareFiles(histdir,new Object[]{
+    // ToDo: 別フォルダへの移動にも対応したら、次のがOKになる。
+    /*
+    compareFiles(hisdir,new Object[]{
 	"2", new Object[]{
-	  "2-hist", "data 1212",
-	  "3-hist", "data 333333",
+	  "2-"+hist(current), "data 1212", current,
 	},
 	"3", new Object[]{
-	  "0-hist", "",
+	  "0-"+hist(current+2*min), "", current+2*min,
 	},
       });
     */
@@ -804,7 +831,7 @@ public class BackuperTest
     File dbdir = new File(root,"dic");
     File srcdir = new File(root,"src");
     File dstdir = new File(root,"dst");
-    File histdir = new File(root,"hist");
+    File hisdir = new File(root,"his");
     long current = System.currentTimeMillis()/min*min - 3*min;
 
     createFiles(root,new Object[]{
@@ -816,7 +843,12 @@ public class BackuperTest
 	    "  </storage>",
 	    "  <storage dir=\""+tempdir.getRoot()+"\" name=\"dst\">",
 	    "    <folder dir=\"dst\" name=\"test\"/>",
+	    "    <folder dir=\"his\" name=\"hist\"/>",
 	    "  </storage>",
+	    "  <backup name=\"test\">",
+	    "    <original storage=\"src\" />",
+	    "    <copy level=\"daily\" storage=\"dst\" history=\"hist\" />",
+	    "  </backup>",
 	    "</database>",
 	  },
 	},
@@ -830,7 +862,7 @@ public class BackuperTest
 	  ".ijk", "", current+4*min,
 	  ".lmn.ext", "", current+5*min,
 	},
-	"c", new Object[]{},
+	"his", new Object[]{},
       });
 
     DataBase db = execute(root,dbdir,true);
@@ -838,15 +870,13 @@ public class BackuperTest
     compareFiles(dstdir,new Object[]{
 	"1.ext", "a/1.ext",
       });
-    /* ToDo : 次のものも成功させる。
-    compareFiles(histdir,new String[][]{
-	"abc-hist", "",
-	"def-hist.ext", "",
-	"gh.ext-hist.ext", "",
-	".ijk-hist", "",
-	".lmn-hist.ext", "",
+    compareFiles(hisdir,new String[]{
+	"abc-"+hist(current+1*min), "",
+	"def-"+hist(current+2*min)+".ext", "",
+	"gh.ext-"+hist(current+3*min)+".ext", "",
+	".ijk-"+hist(current+4*min), "",
+	".lmn-"+hist(current+5*min)+".ext", "",
       });
-    */
   }
 
   @Test
@@ -1153,13 +1183,19 @@ public class BackuperTest
   {
     try ( DataBase db = new DataBase(dbdir.toPath()) ) {
       if ( useXML ) {
-	db.initializeByXml(dbdir.toPath().resolve(Main.CONFIGXML));
+	Backup backup = db.initializeByXml(dbdir.toPath().resolve(Main.CONFIGXML));
+	for ( Task task : backup.get("daily") ) {
+	  for ( Storage copy : task.copyStorages ) {
+	    Storage his = task.historyStorages.get(copy.storageName);
+	    Main.backup(task.origStorage,copy,his);
+	  }
+	}
       } else {
 	db.initializeByFile(dbdir.toPath().resolve(Main.CONFIGNAME));
+	DataBase.Storage srcStorage = db.get("test.src");
+	DataBase.Storage dstStorage = db.get("test.dst");
+	Main.backup(srcStorage,dstStorage);
       }
-      DataBase.Storage srcStorage = db.get("test.src");
-      DataBase.Storage dstStorage = db.get("test.dst");
-      Main.backup(srcStorage,dstStorage);
       return db;
     }
   }
