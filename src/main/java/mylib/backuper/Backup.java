@@ -4,7 +4,6 @@ import static mylib.backuper.DataBase.attrerror;
 import static mylib.backuper.DataBase.getAttr;
 import static mylib.backuper.DataBase.nodeerror;
 import static mylib.backuper.DataBase.selectElement;
-import static mylib.backuper.DataBase.serialize;
 
 import java.io.IOException;
 import java.io.PrintStream;

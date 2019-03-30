@@ -1472,7 +1472,7 @@ public class BackuperTest
     System.out.println("-- Logger Info (start) --");
     System.out.println("Context = "+log.getLoggerContext());
     for ( int i = 0; itr.hasNext(); ++i ) {
-      Appender apder = itr.next();
+      Appender<ILoggingEvent> apder = itr.next();
       System.out.println("appender["+i+"] = "+apder);
     }
     System.out.println("-- Logger Info (end) --");

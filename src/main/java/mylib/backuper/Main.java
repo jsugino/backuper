@@ -337,7 +337,6 @@ public class Main
     Folder dstFolder = dstStorage.getFolder(parentPath);
     File   dstFile   = findFromList(dstFolder.files,filePath);
     long   unit      = Math.max(srcStorage.timeUnit(),dstStorage.timeUnit());
-    int type = 0;
 
     if ( srcFile.length == dstFile.length ) {
       log.trace("same length");

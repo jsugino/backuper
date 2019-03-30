@@ -282,7 +282,6 @@ public class DataBase extends HashMap<String,DataBase.Storage> implements Closea
     throws IOException
     {
       HashMap<Path,Integer> map = new HashMap<>();
-      int i = 0;
       for ( Folder folder : this.folders ) {
 	int n = folder.ignores.size() + folder.files.size();
 	for ( Path p = folder.folderPath; p != null; p = p.getParent() ) {

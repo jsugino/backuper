@@ -573,12 +573,13 @@ public class FtpTest
 	  },
 	},
       });
-    DataBase db = new DataBase(dbdir.toPath());
-    Storage sto = db.get("test.dst");
-    sto.scanFolder();
-    System.out.println("-- dump -- start");
-    sto.dump(System.out);
-    System.out.println("-- dump -- end");
+    try ( DataBase db = new DataBase(dbdir.toPath()) ) {
+      Storage sto = db.get("test.dst");
+      sto.scanFolder();
+      System.out.println("-- dump -- start");
+      sto.dump(System.out);
+      System.out.println("-- dump -- end");
+    }
   }
 
   // ----------------------------------------------------------------------

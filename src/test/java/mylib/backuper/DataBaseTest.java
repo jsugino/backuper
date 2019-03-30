@@ -4,7 +4,6 @@ import static mylib.backuper.BackuperTest.checkContents;
 import static mylib.backuper.BackuperTest.event;
 
 import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertFalse;
 
 import java.io.File;
 import java.nio.file.Paths;
