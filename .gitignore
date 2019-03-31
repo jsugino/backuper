@@ -23,3 +23,9 @@ target
 .project
 .classpath
 .settings
+
+############
+## Derby
+############
+
+derby.log

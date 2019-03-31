@@ -368,9 +368,8 @@ public class Main
       dstFile.hashValue = srcFile.hashValue = hashValue;
       dstStorage.setRealLastModified(dstFile.filePath,dstFile.lastModified);
     } else {
-      log.info("delete "+filePath);
+      log.info("copy override "+filePath);
       dstStorage.deleteRealFile(filePath);
-      log.info("copy "+filePath);
       String hashValue = srcStorage.copyRealFile(filePath,dstStorage);
       dstFile.length = srcFile.length;
       if ( srcFile.hashValue != null && !srcFile.hashValue.equals(hashValue) )
