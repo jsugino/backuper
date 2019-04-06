@@ -195,7 +195,7 @@ public class DataBaseTest
       String fieldname = fields[i].getName();
       NoSuchFieldException first = null;
       Field field = null;
-      for ( Class cls = original.getClass(); cls != null; cls = cls.getSuperclass() ) {
+      for ( Class<? extends Object> cls = original.getClass(); cls != null; cls = cls.getSuperclass() ) {
 	try {
 	  field = cls.getDeclaredField(fieldname);
 	  break;
