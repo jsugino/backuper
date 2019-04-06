@@ -125,21 +125,4 @@ public class LocalStorage extends Storage
   {
     Files.move(rootFolder.resolve(fromPath).normalize(),rootFolder.resolve(toPath).normalize());
   }
-
-  @Override
-  public String toString()
-  {
-    StringBuffer buf = new StringBuffer(storageName);
-    buf.append('=').append(rootFolder.toString());
-    if ( folders != null ) {
-      buf.append(" (");
-      int cnt = 0;
-      for ( Folder folder : folders ) {
-	cnt += folder.files.size();
-      }
-      buf.append(cnt);
-      buf.append(" files)");
-    }
-    return buf.toString();
-  }
 }

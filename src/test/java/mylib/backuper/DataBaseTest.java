@@ -6,7 +6,10 @@ import static mylib.backuper.BackuperTest.event;
 import static org.junit.Assert.assertEquals;
 
 import java.io.File;
+import java.lang.reflect.Field;
+import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.util.LinkedList;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
@@ -35,122 +38,174 @@ public class DataBaseTest
 	  .getResource("mylib/backuper/folders.conf").getPath()));
 
       DataBase.Storage storage;
-      LocalStorage local;
-      FtpStorage ftp;
+      PublicLocalStorage local;
+      PublicFtpStorage ftp;
 
       storage = db.remove("Linux.junsei.SSD");
       assertEquals(LocalStorage.class,storage.getClass());
-      local = (LocalStorage)storage;
+      local = new PublicLocalStorage(storage);
       assertEquals(Paths.get("/home/junsei"),local.rootFolder);
-      assertPattern("work/[^/]+/target",storage.ignoreFolderPats.remove());
-      assertPattern("(.+/)?#[^/]+#",storage.ignoreFilePats.remove());
-      assertPattern("(.+/)?[^/]+~",storage.ignoreFilePats.remove());
-      assertEquals(0,storage.ignoreFilePats.size());
-      assertEquals(0,storage.ignoreFolderPats.size());
+      assertPattern("work/[^/]+/target",local.ignoreFolderPats.remove());
+      assertPattern("(.+/)?#[^/]+#",local.ignoreFilePats.remove());
+      assertPattern("(.+/)?[^/]+~",local.ignoreFilePats.remove());
+      assertEquals(0,local.ignoreFilePats.size());
+      assertEquals(0,local.ignoreFolderPats.size());
 
       storage = db.remove("Linux.junsei.C");
       assertEquals(LocalStorage.class,storage.getClass());
-      local = (LocalStorage)storage;
+      local = new PublicLocalStorage(storage);
       assertEquals(Paths.get("/mnt/C/BACKUP/Linux/home/junsei"),local.rootFolder);
-      assertEquals(0,storage.ignoreFilePats.size());
-      assertEquals(0,storage.ignoreFolderPats.size());
+      assertEquals(0,local.ignoreFilePats.size());
+      assertEquals(0,local.ignoreFolderPats.size());
 
       storage = db.remove("Linux.junsei.D");
       assertEquals(LocalStorage.class,storage.getClass());
-      local = (LocalStorage)storage;
+      local = new PublicLocalStorage(storage);
       assertEquals(Paths.get("/mnt/D/Linux/home/junsei"),local.rootFolder);
-      assertEquals(0,storage.ignoreFilePats.size());
-      assertEquals(0,storage.ignoreFolderPats.size());
+      assertEquals(0,local.ignoreFilePats.size());
+      assertEquals(0,local.ignoreFolderPats.size());
 
       storage = db.remove("Linux.junsei.G");
       assertEquals(LocalStorage.class,storage.getClass());
-      local = (LocalStorage)storage;
+      local = new PublicLocalStorage(storage);
       assertEquals(Paths.get("/run/media/junsei/HD-LBU3/Linux/home/junsei"),local.rootFolder);
-      assertEquals(0,storage.ignoreFilePats.size());
-      assertEquals(0,storage.ignoreFolderPats.size());
+      assertEquals(0,local.ignoreFilePats.size());
+      assertEquals(0,local.ignoreFolderPats.size());
 
       storage = db.remove("blog.comb");
       assertEquals(FtpStorage.class,storage.getClass());
-      ftp = (FtpStorage)storage;
+      ftp = new PublicFtpStorage(storage);
       assertEquals("my.host.ne.jp",ftp.hostname);
       assertEquals("www/blog",ftp.rootFolder);
-      assertPattern("(.+/)?\\.htaccess",storage.ignoreFilePats.remove());
-      assertPattern("(.+/)?\\.htpasswd",storage.ignoreFilePats.remove());
-      assertEquals(0,storage.ignoreFilePats.size());
-      assertEquals(0,storage.ignoreFolderPats.size());
+      assertPattern("(.+/)?\\.htaccess",ftp.ignoreFilePats.remove());
+      assertPattern("(.+/)?\\.htpasswd",ftp.ignoreFilePats.remove());
+      assertEquals(0,ftp.ignoreFilePats.size());
+      assertEquals(0,ftp.ignoreFolderPats.size());
 
       storage = db.remove("blog.C");
       assertEquals(LocalStorage.class,storage.getClass());
-      local = (LocalStorage)storage;
+      local = new PublicLocalStorage(storage);
       assertEquals(Paths.get("/mnt/C/BACKUP/Downloads/5.blog"),local.rootFolder);
-      assertPattern("(.+/)?00\\.loader",storage.ignoreFolderPats.remove());
-      assertEquals(0,storage.ignoreFilePats.size());
-      assertEquals(0,storage.ignoreFolderPats.size());
+      assertPattern("(.+/)?00\\.loader",local.ignoreFolderPats.remove());
+      assertEquals(0,local.ignoreFilePats.size());
+      assertEquals(0,local.ignoreFolderPats.size());
 
       storage = db.remove("Users.junsei.C");
       assertEquals(LocalStorage.class,storage.getClass());
-      local = (LocalStorage)storage;
+      local = new PublicLocalStorage(storage);
       assertEquals(Paths.get("/mnt/C/Users/junsei"),local.rootFolder);
-      assertEquals(0,storage.ignoreFilePats.size());
-      assertEquals(0,storage.ignoreFolderPats.size());
+      assertEquals(0,local.ignoreFilePats.size());
+      assertEquals(0,local.ignoreFolderPats.size());
 
       storage = db.remove("Users.junsei.D");
       assertEquals(LocalStorage.class,storage.getClass());
-      local = (LocalStorage)storage;
+      local = new PublicLocalStorage(storage);
       assertEquals(Paths.get("/mnt/D/Users/junsei"),local.rootFolder);
-      assertEquals(0,storage.ignoreFilePats.size());
-      assertEquals(0,storage.ignoreFolderPats.size());
+      assertEquals(0,local.ignoreFilePats.size());
+      assertEquals(0,local.ignoreFolderPats.size());
 
       storage = db.remove("Users.junsei.G");
       assertEquals(LocalStorage.class,storage.getClass());
-      local = (LocalStorage)storage;
+      local = new PublicLocalStorage(storage);
       assertEquals(Paths.get("/run/media/junsei/HD-LBU3/Users/junsei"),local.rootFolder);
-      assertEquals(0,storage.ignoreFilePats.size());
-      assertEquals(0,storage.ignoreFolderPats.size());
+      assertEquals(0,local.ignoreFilePats.size());
+      assertEquals(0,local.ignoreFolderPats.size());
 
       storage = db.remove("Common.C");
       assertEquals(LocalStorage.class,storage.getClass());
-      local = (LocalStorage)storage;
+      local = new PublicLocalStorage(storage);
       assertEquals(Paths.get("/mnt/C/BACKUP/Common"),local.rootFolder);
-      assertEquals(0,storage.ignoreFilePats.size());
-      assertEquals(0,storage.ignoreFolderPats.size());
+      assertEquals(0,local.ignoreFilePats.size());
+      assertEquals(0,local.ignoreFolderPats.size());
 
       storage = db.remove("Common.D");
       assertEquals(LocalStorage.class,storage.getClass());
-      local = (LocalStorage)storage;
+      local = new PublicLocalStorage(storage);
       assertEquals(Paths.get("/mnt/D/Common"),local.rootFolder);
-      assertEquals(0,storage.ignoreFilePats.size());
-      assertEquals(0,storage.ignoreFolderPats.size());
+      assertEquals(0,local.ignoreFilePats.size());
+      assertEquals(0,local.ignoreFolderPats.size());
 
       storage = db.remove("Common.G");
       assertEquals(LocalStorage.class,storage.getClass());
-      local = (LocalStorage)storage;
+      local = new PublicLocalStorage(storage);
       assertEquals(Paths.get("/run/media/junsei/HD-LBU3/Common"),local.rootFolder);
-      assertEquals(0,storage.ignoreFilePats.size());
-      assertEquals(0,storage.ignoreFolderPats.size());
+      assertEquals(0,local.ignoreFilePats.size());
+      assertEquals(0,local.ignoreFolderPats.size());
 
       storage = db.remove("VMs.C");
       assertEquals(LocalStorage.class,storage.getClass());
-      local = (LocalStorage)storage;
+      local = new PublicLocalStorage(storage);
       assertEquals(Paths.get("/mnt/C/BACKUP/Virtual Machines"),local.rootFolder);
-      assertEquals(0,storage.ignoreFilePats.size());
-      assertEquals(0,storage.ignoreFolderPats.size());
+      assertEquals(0,local.ignoreFilePats.size());
+      assertEquals(0,local.ignoreFolderPats.size());
 
       storage = db.remove("VMs.D");
       assertEquals(LocalStorage.class,storage.getClass());
-      local = (LocalStorage)storage;
+      local = new PublicLocalStorage(storage);
       assertEquals(Paths.get("/mnt/D/Virtual Machines"),local.rootFolder);
-      assertEquals(0,storage.ignoreFilePats.size());
-      assertEquals(0,storage.ignoreFolderPats.size());
+      assertEquals(0,local.ignoreFilePats.size());
+      assertEquals(0,local.ignoreFolderPats.size());
 
       storage = db.remove("VMs.G");
       assertEquals(LocalStorage.class,storage.getClass());
-      local = (LocalStorage)storage;
+      local = new PublicLocalStorage(storage);
       assertEquals(Paths.get("/run/media/junsei/HD-LBU3/Virtual Machines"),local.rootFolder);
-      assertEquals(0,storage.ignoreFilePats.size());
-      assertEquals(0,storage.ignoreFolderPats.size());
+      assertEquals(0,local.ignoreFilePats.size());
+      assertEquals(0,local.ignoreFolderPats.size());
 
       assertEquals(0,db.size());
+    }
+  }
+
+  public static class PublicLocalStorage
+  {
+    public Path rootFolder;
+    public LinkedList<Pattern> ignoreFolderPats;
+    public LinkedList<Pattern> ignoreFilePats;
+
+    public PublicLocalStorage( Storage orig )
+    throws NoSuchFieldException, IllegalAccessException
+    {
+      setupFields(this,orig);
+    }
+  }
+
+  public static class PublicFtpStorage
+  {
+    //public FTPClient ftpclient;
+    public String hostname;
+    public String rootFolder;
+    public String userid;
+    public String password;
+    public LinkedList<Pattern> ignoreFolderPats;
+    public LinkedList<Pattern> ignoreFilePats;
+
+    public PublicFtpStorage( Storage orig )
+    throws NoSuchFieldException, IllegalAccessException
+    {
+      setupFields(this,orig);
+    }
+  }
+
+  public static void setupFields( Object instance, Object original )
+  throws NoSuchFieldException, IllegalAccessException
+  {
+    Field fields[] = instance.getClass().getDeclaredFields();
+    for ( int i = 0; i < fields.length; ++i ) {
+      String fieldname = fields[i].getName();
+      NoSuchFieldException first = null;
+      Field field = null;
+      for ( Class cls = original.getClass(); cls != null; cls = cls.getSuperclass() ) {
+	try {
+	  field = cls.getDeclaredField(fieldname);
+	  break;
+	} catch ( NoSuchFieldException ex ) {
+	  if ( first == null ) first = ex;
+	}
+      }
+      if ( field == null ) throw first == null ? new NoSuchFieldException(fieldname) : first;
+      field.setAccessible(true);
+      fields[i].set(instance,field.get(original));
     }
   }
 
@@ -163,148 +218,148 @@ public class DataBaseTest
 	  .getResource("mylib/backuper/folders.conf.xml").getPath()));
 
       DataBase.Storage storage;
-      LocalStorage local;
-      FtpStorage ftp;
+      PublicLocalStorage local;
+      PublicFtpStorage ftp;
 
       storage = db.remove("Linux.junsei.SSD");
       assertEquals(LocalStorage.class,storage.getClass());
-      local = (LocalStorage)storage;
+      local = new PublicLocalStorage(storage);
       assertEquals(Paths.get("/home/junsei"),local.rootFolder);
-      assertPattern("work/[^/]+/target",storage.ignoreFolderPats.remove());
-      assertPattern("(.+/)?#[^/]+#",storage.ignoreFilePats.remove());
-      assertPattern("(.+/)?[^/]+~",storage.ignoreFilePats.remove());
-      assertEquals(0,storage.ignoreFilePats.size());
-      assertEquals(0,storage.ignoreFolderPats.size());
+      assertPattern("work/[^/]+/target",local.ignoreFolderPats.remove());
+      assertPattern("(.+/)?#[^/]+#",local.ignoreFilePats.remove());
+      assertPattern("(.+/)?[^/]+~",local.ignoreFilePats.remove());
+      assertEquals(0,local.ignoreFilePats.size());
+      assertEquals(0,local.ignoreFolderPats.size());
 
       storage = db.remove("Linux.junsei.C");
       assertEquals(LocalStorage.class,storage.getClass());
-      local = (LocalStorage)storage;
+      local = new PublicLocalStorage(storage);
       assertEquals(Paths.get("/mnt/C/BACKUP/Linux/home/junsei"),local.rootFolder);
-      assertEquals(0,storage.ignoreFilePats.size());
-      assertEquals(0,storage.ignoreFolderPats.size());
+      assertEquals(0,local.ignoreFilePats.size());
+      assertEquals(0,local.ignoreFolderPats.size());
 
       storage = db.remove("Linux.junsei.D");
       assertEquals(LocalStorage.class,storage.getClass());
-      local = (LocalStorage)storage;
+      local = new PublicLocalStorage(storage);
       assertEquals(Paths.get("/mnt/D/Linux/home/junsei"),local.rootFolder);
-      assertEquals(0,storage.ignoreFilePats.size());
-      assertEquals(0,storage.ignoreFolderPats.size());
+      assertEquals(0,local.ignoreFilePats.size());
+      assertEquals(0,local.ignoreFolderPats.size());
 
       storage = db.remove("Linux.junsei.G");
       assertEquals(LocalStorage.class,storage.getClass());
-      local = (LocalStorage)storage;
+      local = new PublicLocalStorage(storage);
       assertEquals(Paths.get("/run/media/junsei/HD-LBU3/Linux/home/junsei"),local.rootFolder);
-      assertEquals(0,storage.ignoreFilePats.size());
-      assertEquals(0,storage.ignoreFolderPats.size());
+      assertEquals(0,local.ignoreFilePats.size());
+      assertEquals(0,local.ignoreFolderPats.size());
 
       storage = db.remove("blog.comb");
       assertEquals(FtpStorage.class,storage.getClass());
-      ftp = (FtpStorage)storage;
+      ftp = new PublicFtpStorage(storage);
       assertEquals("my.host.ne.jp",ftp.hostname);
       assertEquals("www/blog",ftp.rootFolder);
-      assertPattern("(.+/)?\\.htaccess",storage.ignoreFilePats.remove());
-      assertPattern("(.+/)?\\.htpasswd",storage.ignoreFilePats.remove());
-      assertEquals(0,storage.ignoreFilePats.size());
-      assertEquals(0,storage.ignoreFolderPats.size());
+      assertPattern("(.+/)?\\.htaccess",ftp.ignoreFilePats.remove());
+      assertPattern("(.+/)?\\.htpasswd",ftp.ignoreFilePats.remove());
+      assertEquals(0,ftp.ignoreFilePats.size());
+      assertEquals(0,ftp.ignoreFolderPats.size());
 
       storage = db.remove("blog.C");
       assertEquals(LocalStorage.class,storage.getClass());
-      local = (LocalStorage)storage;
+      local = new PublicLocalStorage(storage);
       assertEquals(Paths.get("/mnt/C/BACKUP/Downloads/5.blog"),local.rootFolder);
-      assertPattern("(.+/)?00\\.loader",storage.ignoreFolderPats.remove());
-      assertEquals(0,storage.ignoreFilePats.size());
-      assertEquals(0,storage.ignoreFolderPats.size());
+      assertPattern("(.+/)?00\\.loader",local.ignoreFolderPats.remove());
+      assertEquals(0,local.ignoreFilePats.size());
+      assertEquals(0,local.ignoreFolderPats.size());
 
       storage = db.remove("Users.junsei.C");
       assertEquals(LocalStorage.class,storage.getClass());
-      local = (LocalStorage)storage;
+      local = new PublicLocalStorage(storage);
       assertEquals(Paths.get("/mnt/C/Users/junsei"),local.rootFolder);
-      assertEquals(0,storage.ignoreFilePats.size());
-      assertEquals(0,storage.ignoreFolderPats.size());
+      assertEquals(0,local.ignoreFilePats.size());
+      assertEquals(0,local.ignoreFolderPats.size());
 
       storage = db.remove("Users.junsei.D");
       assertEquals(LocalStorage.class,storage.getClass());
-      local = (LocalStorage)storage;
+      local = new PublicLocalStorage(storage);
       assertEquals(Paths.get("/mnt/D/Users/junsei"),local.rootFolder);
-      assertEquals(0,storage.ignoreFilePats.size());
-      assertEquals(0,storage.ignoreFolderPats.size());
+      assertEquals(0,local.ignoreFilePats.size());
+      assertEquals(0,local.ignoreFolderPats.size());
 
       storage = db.remove("Users.junsei.G");
       assertEquals(LocalStorage.class,storage.getClass());
-      local = (LocalStorage)storage;
+      local = new PublicLocalStorage(storage);
       assertEquals(Paths.get("/run/media/junsei/HD-LBU3/Users/junsei"),local.rootFolder);
-      assertEquals(0,storage.ignoreFilePats.size());
-      assertEquals(0,storage.ignoreFolderPats.size());
+      assertEquals(0,local.ignoreFilePats.size());
+      assertEquals(0,local.ignoreFolderPats.size());
 
       storage = db.remove("Users.history.junsei.D");
       assertEquals(LocalStorage.class,storage.getClass());
-      local = (LocalStorage)storage;
+      local = new PublicLocalStorage(storage);
       assertEquals(Paths.get("/mnt/D/Users.history/junsei"),local.rootFolder);
-      assertEquals(0,storage.ignoreFilePats.size());
-      assertEquals(0,storage.ignoreFolderPats.size());
+      assertEquals(0,local.ignoreFilePats.size());
+      assertEquals(0,local.ignoreFolderPats.size());
 
       storage = db.remove("Users.history.D");
       assertEquals(LocalStorage.class,storage.getClass());
-      local = (LocalStorage)storage;
+      local = new PublicLocalStorage(storage);
       assertEquals(Paths.get("/mnt/D/Users.history"),local.rootFolder);
-      assertEquals(0,storage.ignoreFilePats.size());
-      assertEquals(0,storage.ignoreFolderPats.size());
+      assertEquals(0,local.ignoreFilePats.size());
+      assertEquals(0,local.ignoreFolderPats.size());
 
       storage = db.remove("Users.history.G");
       assertEquals(LocalStorage.class,storage.getClass());
-      local = (LocalStorage)storage;
+      local = new PublicLocalStorage(storage);
       assertEquals(Paths.get("/run/media/junsei/HD-LBU3/Users.history"),local.rootFolder);
-      assertEquals(0,storage.ignoreFilePats.size());
-      assertEquals(0,storage.ignoreFolderPats.size());
+      assertEquals(0,local.ignoreFilePats.size());
+      assertEquals(0,local.ignoreFolderPats.size());
 
       storage = db.remove("BACKUP.C");
       assertEquals(LocalStorage.class,storage.getClass());
-      local = (LocalStorage)storage;
+      local = new PublicLocalStorage(storage);
       assertEquals(Paths.get("/mnt/C/BACKUP"),local.rootFolder);
-      assertEquals(0,storage.ignoreFilePats.size());
-      assertEquals(0,storage.ignoreFolderPats.size());
+      assertEquals(0,local.ignoreFilePats.size());
+      assertEquals(0,local.ignoreFolderPats.size());
 
       storage = db.remove("Common.C");
       assertEquals(LocalStorage.class,storage.getClass());
-      local = (LocalStorage)storage;
+      local = new PublicLocalStorage(storage);
       assertEquals(Paths.get("/mnt/C/BACKUP/Common"),local.rootFolder);
-      assertEquals(0,storage.ignoreFilePats.size());
-      assertEquals(0,storage.ignoreFolderPats.size());
+      assertEquals(0,local.ignoreFilePats.size());
+      assertEquals(0,local.ignoreFolderPats.size());
 
       storage = db.remove("Common.D");
       assertEquals(LocalStorage.class,storage.getClass());
-      local = (LocalStorage)storage;
+      local = new PublicLocalStorage(storage);
       assertEquals(Paths.get("/mnt/D/Common"),local.rootFolder);
-      assertEquals(0,storage.ignoreFilePats.size());
-      assertEquals(0,storage.ignoreFolderPats.size());
+      assertEquals(0,local.ignoreFilePats.size());
+      assertEquals(0,local.ignoreFolderPats.size());
 
       storage = db.remove("Common.G");
       assertEquals(LocalStorage.class,storage.getClass());
-      local = (LocalStorage)storage;
+      local = new PublicLocalStorage(storage);
       assertEquals(Paths.get("/run/media/junsei/HD-LBU3/Common"),local.rootFolder);
-      assertEquals(0,storage.ignoreFilePats.size());
-      assertEquals(0,storage.ignoreFolderPats.size());
+      assertEquals(0,local.ignoreFilePats.size());
+      assertEquals(0,local.ignoreFolderPats.size());
 
       storage = db.remove("VMs.C");
       assertEquals(LocalStorage.class,storage.getClass());
-      local = (LocalStorage)storage;
+      local = new PublicLocalStorage(storage);
       assertEquals(Paths.get("/mnt/C/BACKUP/Virtual Machines"),local.rootFolder);
-      assertEquals(0,storage.ignoreFilePats.size());
-      assertEquals(0,storage.ignoreFolderPats.size());
+      assertEquals(0,local.ignoreFilePats.size());
+      assertEquals(0,local.ignoreFolderPats.size());
 
       storage = db.remove("VMs.D");
       assertEquals(LocalStorage.class,storage.getClass());
-      local = (LocalStorage)storage;
+      local = new PublicLocalStorage(storage);
       assertEquals(Paths.get("/mnt/D/Virtual Machines"),local.rootFolder);
-      assertEquals(0,storage.ignoreFilePats.size());
-      assertEquals(0,storage.ignoreFolderPats.size());
+      assertEquals(0,local.ignoreFilePats.size());
+      assertEquals(0,local.ignoreFolderPats.size());
 
       storage = db.remove("VMs.G");
       assertEquals(LocalStorage.class,storage.getClass());
-      local = (LocalStorage)storage;
+      local = new PublicLocalStorage(storage);
       assertEquals(Paths.get("/run/media/junsei/HD-LBU3/Virtual Machines"),local.rootFolder);
-      assertEquals(0,storage.ignoreFilePats.size());
-      assertEquals(0,storage.ignoreFolderPats.size());
+      assertEquals(0,local.ignoreFilePats.size());
+      assertEquals(0,local.ignoreFolderPats.size());
 
       assertEquals(db.toString(),0,db.size());
     }

@@ -139,8 +139,8 @@ public class Main
 	      storage.readDB();
 	      System.out.format("%-20s %6d %7d %s",
 		storage.storageName,
-		storage.folders.size(),
-		storage.folders.stream().mapToLong(f->f.files.size()).sum(),
+		storage.folderSize(),
+		storage.fileSize(),
 		storage.getRoot()).println();
 	    }
 	  }
@@ -266,6 +266,7 @@ public class Main
     dstStorage.cleanupFolder();
 
     // check : file in src --> file in dst
+    /*
     ListIterator<File> itr = frlist.listIterator();
     while ( itr.hasNext() ) {
       File file = itr.next();
@@ -286,17 +287,20 @@ public class Main
 	itr.remove();
       }
     }
+    */
 
     // frlist means "copy"
     log.trace("start copy from "+srcStorage.getRoot()+" to "+dstStorage.getRoot());
     for ( File file : frlist ) {
       //file.dump(System.err);
-      log.info("copy "+file.filePath);
 
+      if ( dstStorage.getFolder(file.filePath) != null ) { log.error("CANNOT COPY "+file.filePath); continue; }
       Path parentPath = file.filePath.getParent();
       if ( parentPath == null ) parentPath = Paths.get(".");
-      Folder dstFolder = dstStorage.getFolder(parentPath);
-
+      Folder dstFolder = dstStorage.getFolder(parentPath,dstStorage.storageName);
+      if ( dstFolder == null ) { log.error("CANNOT COPY "+file.filePath); continue; }
+      if ( dstFolder.ignores.contains(file.filePath) ) { log.error("CANNOT COPY "+file.filePath); continue; }
+      log.info("copy "+file.filePath);
       String hashValue = srcStorage.copyRealFile(file.filePath,dstStorage);
       dstStorage.setRealLastModified(file.filePath,file.lastModified);
 
@@ -332,9 +336,9 @@ public class Main
       +", hisStorage = "+(hisStorage == null ? "(null)" : hisStorage.storageName));
     Path parentPath = filePath.getParent();
     if ( parentPath == null ) parentPath = Paths.get(".");
-    Folder srcFolder = findFromList(srcStorage.folders,parentPath);
+    Folder srcFolder = srcStorage.getFolder(parentPath);
     File   srcFile   = findFromList(srcFolder.files,filePath);
-    Folder dstFolder = dstStorage.getFolder(parentPath);
+    Folder dstFolder = dstStorage.getFolder(parentPath,dstStorage.storageName);
     File   dstFile   = findFromList(dstFolder.files,filePath);
     long   unit      = Math.max(srcStorage.timeUnit(),dstStorage.timeUnit());
 
@@ -442,12 +446,7 @@ public class Main
   // ======================================================================
   public static LinkedList<File> toFileList( Storage storage )
   {
-    LinkedList<File> list = new LinkedList<>();
-    for ( Folder folder : storage.folders ) {
-      for ( File file : folder.files ) {
-	list.add(file);
-      }
-    }
+    LinkedList<File> list = storage.getAllFiles();
 
     Collections.sort(list,Comparator.comparing(file -> file.filePath));
 

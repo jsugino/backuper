@@ -25,6 +25,7 @@ import java.util.List;
 import java.util.ListIterator;
 import java.util.function.BiFunction;
 import java.util.regex.Pattern;
+import java.util.stream.Collectors;
 
 import javax.xml.parsers.DocumentBuilderFactory;
 import javax.xml.parsers.ParserConfigurationException;
@@ -55,11 +56,11 @@ public class DataBase extends HashMap<String,DataBase.Storage> implements Closea
   // ======================================================================
   public abstract class Storage implements Closeable
   {
-    public String driveName;
+    private String driveName;
     public String storageName;
-    public LinkedList<Folder> folders = null;		// 全てのフォルダのリスト
-    public LinkedList<Pattern> ignoreFilePats = new LinkedList<>();
-    public LinkedList<Pattern> ignoreFolderPats = new LinkedList<>();
+    private LinkedList<Folder> folders = null;		// 全てのフォルダのリスト
+    private LinkedList<Pattern> ignoreFilePats = new LinkedList<>();
+    private LinkedList<Pattern> ignoreFolderPats = new LinkedList<>();
 
     public Storage( String storageName )
     {
@@ -96,18 +97,35 @@ public class DataBase extends HashMap<String,DataBase.Storage> implements Closea
     public Folder getFolder( Path path, String name )
     throws IOException
     {
-      log.trace("getFolder : "+path);
+      log.trace("getFolder path = "+path+", name = "+name);
       if ( path == null ) path = Paths.get(".");
       Folder folder = findFromList(folders,path);
       if ( folder == null ) {
+	if ( name == null ) return null;
+	Folder parent = getFolder(path.getParent(),name);
+	if ( parent == null ) return null;
+	if ( parent.ignores.contains(path) ) return null;
 	folder = new Folder(path);
 	registerToList(folders,folder);
-	getFolder(path.getParent());
-	name = name == null ? "" : name+" ";
-	log.info("mkdir "+name+path);
+	log.info("mkdir "+name+" "+path);
 	makeRealDirectory(path);
       }
       return folder;
+    }
+
+    public int folderSize()
+    {
+      return this.folders.size();
+    }
+
+    public int fileSize()
+    {
+      return this.folders.stream().mapToInt(f->f.files.size()).sum();
+    }
+
+    public LinkedList<File> getAllFiles()
+    {
+      return this.folders.stream().flatMap(f->f.files.stream()).collect(Collectors.toCollection(LinkedList::new));
     }
 
     public void addIgnore( String line )
@@ -434,6 +452,16 @@ public class DataBase extends HashMap<String,DataBase.Storage> implements Closea
       int idx = str.indexOf('=');
       if ( idx > 0 ) str = str.substring(0,idx);
       return str;
+    }
+
+    @Override
+    public String toString()
+    {
+      StringBuffer buf = new StringBuffer(storageName);
+      buf.append('=').append(getRoot());
+      if ( folders != null )
+	buf.append(" (").append(fileSize()).append(" files)");
+      return buf.toString();
     }
   }
 
