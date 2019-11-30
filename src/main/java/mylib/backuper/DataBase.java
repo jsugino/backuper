@@ -56,7 +56,7 @@ public class DataBase extends HashMap<String,DataBase.Storage> implements Closea
   // ======================================================================
   public abstract class Storage implements Closeable
   {
-    private String driveName;
+    //private String driveName;
     public String storageName;
     private LinkedList<Folder> folders = null;		// 全てのフォルダのリスト
     private LinkedList<Pattern> ignoreFilePats = new LinkedList<>();

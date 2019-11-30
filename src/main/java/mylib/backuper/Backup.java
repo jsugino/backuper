@@ -27,10 +27,10 @@ public class Backup extends HashMap<String,List<Backup.Task>>
 
   public static class Task
   {
-    String name;
-    Storage origStorage;
-    LinkedList<Storage> copyStorages = new LinkedList<>();
-    HashMap<String,Storage> historyStorages = new HashMap<>();
+    public String name;
+    public Storage origStorage;
+    public LinkedList<Storage> copyStorages = new LinkedList<>();
+    public HashMap<String,Storage> historyStorages = new HashMap<>();
 
     public Task( String name, Storage origStorage )
     {

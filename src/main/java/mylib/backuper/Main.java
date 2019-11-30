@@ -144,6 +144,19 @@ public class Main
 		storage.getRoot()).println();
 	    }
 	  }
+	  backup.forEach((key,list)->{
+	      System.out.println("["+key+"]");
+	      list.forEach(task->{
+		  Storage orig = task.origStorage;
+		  System.out.println("    "+orig.getRoot()+" ("+orig.storageName+")");
+		  task.copyStorages.forEach(sto->{
+		      System.out.println("        "+sto.getRoot()+" ("+sto.storageName+")");
+		      Storage his = task.historyStorages.get(sto.storageName);
+		      if ( his != null )
+			System.out.println("          history "+his.getRoot());
+		    });
+		});
+	    });
 	}
 	break;
       }
@@ -205,7 +218,16 @@ public class Main
 
   public static List<Task> getTaskList( Backup backup, List<String> args )
   {
-    String arg = getArg(args);
+    String arg = getArg(args,false);
+    if ( arg == null ) {
+      StringBuffer buf = new StringBuffer();
+      String str = "Need to specify Task Name : ";
+      for ( String key : backup.keySet() ) {
+	buf.append(str).append(key);
+	str = ", ";
+      }
+      throw new UsageException(buf.toString());
+    }
     List<Task> tasklist = backup.get(arg);
     if ( tasklist == null ) throw new UsageException("No such task : "+arg);
     return tasklist;
