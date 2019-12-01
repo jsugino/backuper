@@ -374,7 +374,7 @@ public class BackuperTest
 	},
       });
 
-    DataBase db = execute(root,dbdir);
+    /*DataBase db = */execute(root,dbdir);
 
     compareFiles(dstdir,new Object[]{
 	"1", "1", current,
@@ -537,7 +537,7 @@ public class BackuperTest
 	},
       });
 
-    DataBase db = execute(root,dbdir);
+    /*DataBase db = */execute(root,dbdir);
 
     compareFiles(dstdir,new Object[]{
 	"1", "1", current,
@@ -597,7 +597,7 @@ public class BackuperTest
 	},
       });
 
-    DataBase db = execute(root,dbdir);
+    /*DataBase db = */execute(root,dbdir);
 
     compareFiles(dstdir,new Object[]{
 	"1", new Object[]{
@@ -640,7 +640,7 @@ public class BackuperTest
   {
     File root = tempdir.getRoot();
     File dbdir = new File(root,"dic");
-    File srcdir = new File(root,"src");
+    //File srcdir = new File(root,"src");
     File dstdir = new File(root,"dst");
     File hisdir = new File(root,"his");
     long current = System.currentTimeMillis() - 10000L;
@@ -691,7 +691,7 @@ public class BackuperTest
 	"his", new Object[]{},
       });
 
-    DataBase db = execute(root,dbdir,true);
+    /*DataBase db = */execute(root,dbdir,true);
 
     compareFiles(dstdir,new Object[]{
 	"1", "", current,
@@ -754,9 +754,9 @@ public class BackuperTest
   {
     File root = tempdir.getRoot();
     File dbdir = new File(root,"dic");
-    File srcdir = new File(root,"src");
+    //File srcdir = new File(root,"src");
     File dstdir = new File(root,"dst");
-    File hisdir = new File(root,"his");
+    //File hisdir = new File(root,"his");
     long current = System.currentTimeMillis()/min*min - 3*min;
 
     // prepareMove()
@@ -798,7 +798,7 @@ public class BackuperTest
 	"his", new Object[]{},
       });
 
-    DataBase db = execute(root,dbdir,true);
+    /*DataBase db = */execute(root,dbdir,true);
 
     compareFiles(dstdir,new Object[]{
 	"1", new Object[] {
@@ -827,7 +827,7 @@ public class BackuperTest
   {
     File root = tempdir.getRoot();
     File dbdir = new File(root,"dic");
-    File srcdir = new File(root,"src");
+    //File srcdir = new File(root,"src");
     File dstdir = new File(root,"dst");
     File hisdir = new File(root,"his");
     long current = System.currentTimeMillis()/min*min - 3*min;
@@ -863,7 +863,7 @@ public class BackuperTest
 	"his", new Object[]{},
       });
 
-    DataBase db = execute(root,dbdir,true);
+    /*DataBase db = */execute(root,dbdir,true);
 
     compareFiles(dstdir,new Object[]{
 	"1.ext", "a/1.ext",
@@ -1165,6 +1165,21 @@ public class BackuperTest
     // "cygwinjunsei/work/*/target"
     // "cygwinjunsei/**/#*#"
     // "cygwinjunsei/**/*~"
+  }
+
+  @Test
+  public void testPrintTask()
+  throws Exception
+  {
+    File root = tempdir.getRoot();
+    File dbdir = new File(root,"dic");
+    try ( DataBase db = new DataBase(dbdir.toPath()) ) {
+      Backup backup = db.initializeByXml(Paths.get(DataBase.class.getClassLoader()
+	  .getResource("mylib/backuper/folders.conf.xml").getPath()));
+      System.out.println("-- START --");
+      backup.printTask(System.out);
+      System.out.println("-- END --");
+    }
   }
 
   // ----------------------------------------------------------------------

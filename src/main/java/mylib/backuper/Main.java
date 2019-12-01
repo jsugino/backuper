@@ -37,6 +37,7 @@ public class Main
 
   public static Command exCommand = Command.BACKUP_OR_SCANONLY;
 
+  @SuppressWarnings("serial")
   public static class UsageException extends RuntimeException
   {
     public UsageException() { super(); }
@@ -144,19 +145,7 @@ public class Main
 		storage.getRoot()).println();
 	    }
 	  }
-	  backup.forEach((key,list)->{
-	      System.out.println("["+key+"]");
-	      list.forEach(task->{
-		  Storage orig = task.origStorage;
-		  System.out.println("    "+orig.getRoot()+" ("+orig.storageName+")");
-		  task.copyStorages.forEach(sto->{
-		      System.out.println("        "+sto.getRoot()+" ("+sto.storageName+")");
-		      Storage his = task.historyStorages.get(sto.storageName);
-		      if ( his != null )
-			System.out.println("          history "+his.getRoot());
-		    });
-		});
-	    });
+	  backup.printTask(System.out);
 	}
 	break;
       }

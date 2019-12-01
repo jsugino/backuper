@@ -45,6 +45,7 @@ import org.w3c.dom.Node;
 import org.w3c.dom.NodeList;
 import org.xml.sax.SAXException;
 
+@SuppressWarnings("serial")
 public class DataBase extends HashMap<String,DataBase.Storage> implements Closeable
 {
   // ======================================================================
@@ -226,6 +227,7 @@ public class DataBase extends HashMap<String,DataBase.Storage> implements Closea
     public String copyRealFile( Path filePath, Storage dstStorage )
     throws IOException
     {
+      @SuppressWarnings("resource")
       Storage srcStorage = this;
       log.trace("copyRealFile "+filePath
 	+", srcStorage = "+srcStorage.storageName
@@ -260,6 +262,7 @@ public class DataBase extends HashMap<String,DataBase.Storage> implements Closea
     public void moveHistoryFile( Path filePath, Storage dstStorage )
     throws IOException
     {
+      @SuppressWarnings("resource")
       Storage srcStorage = this;
       log.trace("moveHistoryFile "+filePath
 	+", srcStorage = "+srcStorage.storageName

@@ -404,7 +404,7 @@ public class DataBaseTest
 	  "blog.comb=ftp://my.host.ne.jp/www/blog",
 	});
       checkContents(bk::dump,new String[]{
-	  "(noname)",
+	  "(non)",
 	  "    blog(C->comb)",
 	  "daily",
 	  "    Common(C->D)",
