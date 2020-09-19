@@ -43,13 +43,34 @@ public class Backup extends HashMap<String,List<Backup.Task>>
     }
   }
 
-  public void registerElem( DataBase db, Element elem )
+  public void registerElem( DataBase db, Element elem, HashMap<String,String[]> folderdefMap )
   throws IOException, TransformerException
   {
+    String ref = getAttr(elem,"ref");
     String nameStr = getAttr(elem,"name");
-    if ( nameStr == null ) { attrerror("name",elem); return; }
-    String names[] = nameStr.split(",");
     NodeList list = elem.getChildNodes();
+    if ( ref != null ) {
+      if ( nameStr != null ) {
+	nodeerror("both of attribute 'name' and 'ref' are used",elem);
+      } else {
+	String refdefs[] = folderdefMap.get(ref);
+	String names[] = new String[refdefs.length/2];
+	for ( int i = 0; i < names.length; ++i ) {
+	  names[i] = refdefs[i*2+1];
+	}
+	registerElemByNames(names,db,list);
+      }
+    } else if ( nameStr == null ) {
+      nodeerror("neither 'name' nor 'ref' is used",elem);
+    } else {
+      String names[] = nameStr.split(",");
+      registerElemByNames(names,db,list);
+    }
+  }
+
+  public void registerElemByNames( String names[], DataBase db, NodeList list )
+  throws IOException, TransformerException
+  {
     String origStorage = null;
     for ( int i = 0; i < list.getLength(); ++i ) {
       Element copy = selectElement(list.item(i));

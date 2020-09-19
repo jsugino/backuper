@@ -57,7 +57,7 @@ public class Main
       main(args);
     } catch ( UsageException ex ) {
       log.error(ex.getMessage(),ex);
-      System.err.println("usage : java -jar file.jar [-sd] dic.folder src.name [dst.name]");
+      System.err.println("usage : java -jar file.jar [-sdl] dic.folder src.name [dst.name]");
       System.err.println("    dic.folder : database folder");
       System.err.println("    src.name   : source id");
       System.err.println("    dst.name   : destination id");

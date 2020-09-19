@@ -10,6 +10,7 @@ import java.lang.reflect.Field;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.LinkedList;
+import java.util.Map;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
@@ -418,6 +419,123 @@ public class DataBaseTest
 	  "    Users.junsei(C->G)",
 	  "    Users.history(D->G)",
 	});
+    }
+  }
+
+  @Test
+  public void testBackupRef()
+  throws Exception
+  {
+    try ( DataBase db = new DataBase(tempdir.getRoot().toPath()) ) {
+      String def = DataBase.class
+	.getClassLoader()
+	.getResource("mylib/backuper/folders-2.conf.xml")
+	.getPath();
+      Backup bk = db.initializeByXml(Paths.get(def));
+      checkContents(
+	Main.listDB(db).stream().map(Storage::toString).collect(Collectors.toList()),
+	new String[]{
+	  "BACKUP.C=/mnt/C/BACKUP",
+	  "Common.C=/mnt/C/BACKUP/Common",
+	  "Common.D=/mnt/D/Common",
+	  "Common.G=/run/media/junsei/HD-LBU3/Common",
+	  "Linux.junsei.C=/mnt/C/BACKUP/Linux/home/junsei",
+	  "Linux.junsei.D=/mnt/D/Linux/home/junsei",
+	  "Linux.junsei.G=/run/media/junsei/HD-LBU3/Linux/home/junsei",
+	  "Linux.junsei.SSD=/home/junsei",
+	  "Users.history.D=/mnt/D/Users.history",
+	  "Users.history.G=/run/media/junsei/HD-LBU3/Users.history",
+	  "Users.history.junsei.D=/mnt/D/Users.history/junsei",
+	  "Users.junsei.C=/mnt/C/Users/junsei",
+	  "Users.junsei.D=/mnt/D/Users/junsei",
+	  "Users.junsei.G=/run/media/junsei/HD-LBU3/Users/junsei",
+	  "VMs.C=/mnt/C/BACKUP/Virtual Machines",
+	  "VMs.D=/mnt/D/Virtual Machines",
+	  "VMs.G=/run/media/junsei/HD-LBU3/Virtual Machines",
+	  "blog.C=/mnt/C/BACKUP/Downloads/5.blog",
+	  "blog.comb=ftp://my.host.ne.jp/www/blog",
+	});
+      checkContents(bk::dump,new String[]{
+	  "(non)",
+	  "    blog(C->comb)",
+	  "daily",
+	  "    Linux.junsei(C->D)",
+	  "    Common(C->D)",
+	  "    VMs(C->D)",
+	  "    Users.junsei(C->D(Users.history.junsei.D))",
+	  "monthly",
+	  "    Linux.junsei(C->G)",
+	  "    Common(C->G)",
+	  "    VMs(C->G)",
+	  "    Users.junsei(C->G)",
+	  "    Users.history(D->G)",
+	});
+    }
+  }
+
+  @Test
+  public void dumpBackup()
+  throws Exception
+  {
+    System.out.println("START!!");
+    try ( DataBase db = new DataBase(tempdir.getRoot().toPath()) ) {
+      String def = DataBase.class
+	.getClassLoader()
+	.getResource("mylib/backuper/folders-2.conf.xml")
+	.getPath();
+      Backup bk = db.initializeByXml(Paths.get(def));
+      DoubleKeyHashMap<String,String,Storage> map = new DoubleKeyHashMap<>();
+      for ( Map.Entry<String,Storage> ent : db.entrySet() ) {
+	String key = ent.getKey();
+	Storage val = ent.getValue();
+	assertEquals(key,val.storageName);
+	System.out.println("key = "+key+", name = "+val.storageName+", root = "+val.getRoot());
+	int idx = key.lastIndexOf('.');
+	String key1 = key.substring(0,idx);
+	String key2 = key.substring(idx+1);
+	map.put(key1,key2,val);
+      }
+      String min[] = new String[map.key2Set().size()];
+      int cnt = 0;
+      for ( String key2 : map.key2Set() ) {
+	min[cnt] = null;
+	for ( String key1 : map.key1Set() ) {
+	  Storage val = map.get(key1,key2);
+	  if ( val == null ) continue;
+	  String root = val.getRoot();
+	  if ( min[cnt] == null ) {
+	    min[cnt] = root;
+	    continue;
+	  }
+	  int len = Math.min(min[cnt].length(),root.length());
+	  for ( int i = 0; i < len; ++i ) {
+	    if ( min[cnt].charAt(i) != root.charAt(i) ) {
+	      min[cnt] = min[cnt].substring(0,i);
+	      break;
+	    }
+	  }
+	}
+	++cnt;
+      }
+      for ( String key2 : map.key2Set() ) {
+	System.out.print(",\t");
+	System.out.print(key2);
+      }
+      System.out.println();
+      for ( String com : min ) {
+	System.out.print(",\t");
+	System.out.print(com);
+      }
+      System.out.println();
+      for ( String key1 : map.key1Set() ) {
+	System.out.print(key1);
+	for ( String key2 : map.key2Set() ) {
+	  Storage val = map.get(key1,key2);
+	  System.out.print(",\t");
+	  if ( val != null ) System.out.print(val.getRoot());
+	}
+	System.out.println();
+      }
     }
   }
 }

@@ -1,0 +1,105 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<database>
+<!--
+                *.SSD          *.C
+Users.junsei :                 /mnt/C/Users/junsei
+Linux.junsei :  /home/junsei   /mnt/C/linux/home/junsei
+Common       :                 /mnt/C/Common
+VBs          :                 /mnt/C/Virtual Machines
+BACKUP       :                 /mnt/C/BACKUP
+blog         :                 /mnt/C/BACKUP/Downloads/5.blog
+Users
+-->
+  <folderdef id="stdfolders">
+    <folder dir="Linux/home/junsei" name="Linux.junsei" />
+    <folder dir="Common" name="Common" />
+    <folder dir="Virtual Machines" name="VMs" />
+  </folderdef>
+
+  <storage dir="/" name="SSD">
+    <folder dir="home/junsei" name="Linux.junsei"> <!-- Linux.junsei.SSD -->
+      <excludes>
+	/work/*/target/
+	#*#
+	*~
+      </excludes>
+    </folder>
+  </storage>
+
+  <storage dir="/mnt/C" name="C">
+    <folder dir="Users/junsei" /> <!-- Users.junsei.C -->
+    <folder dir="BACKUP"> <!-- BACKUP.C -->
+      <folder dir="Downloads/5.blog" name="blog">  <!-- blog.C -->
+	<excludes>
+	  00.loader/
+	</excludes>
+      </folder>
+      <folder ref="stdfolders" /> <!-- Linux.junsei.C, Common.C, VMs.C -->
+    </folder>
+  </storage>
+
+  <storage dir="/mnt/D" name="D">
+    <folder ref="stdfolders" /> <!-- Linux.junsei.D, Common.D, VMs.D -->
+    <folder dir="Users/junsei" /> <!-- Users.junsei.D -->
+    <folder dir="Users.history"> <!-- Users.history.D -->
+      <folder dir="junsei" name=".junsei"/> <!-- Users.history.junsei.D -->
+    </folder>
+  </storage>
+
+  <storage dir="/run/media/junsei/HD-LBU3" name="G">
+    <folder ref="stdfolders" /> <!-- Linux.junsei.G, Common.G, VMs.G -->
+    <folder dir="Users/junsei" /> <!-- Users.junsei.G -->
+    <folder dir="Users.history" /> <!-- Users.history.G -->
+  </storage>
+
+  <storage ftp="my.host.ne.jp" user="user" password="password" name="comb">
+    <folder dir="www/blog" name="blog"> <!-- blog.comb -->
+      <excludes>
+	.htaccess
+	.htpasswd
+      </excludes>
+    </folder>
+  </storage>
+
+  <backup ref="stdfolders">
+    <original storage="C" />
+    <copy level="daily" storage="D" />
+    <copy level="monthly" storage="G" />
+  </backup>
+  <!--
+  <backup name="Common,VMs">
+    <original storage="C" />
+    <copy level="daily" storage="D" />
+    <copy level="monthly" storage="G" />
+  </backup>
+  -->
+  <!-- 次の設定を入れると "already exists same copy" 例外が発生してしまう。 -->
+  <!--
+  <backup name="Linux.junsei">
+    <original storage="SSD" />
+    <copy level="daily" storage="C" />
+    <copy level="daily" storage="D" />
+    <copy level="monthly" storage="G" />
+  </backup>
+  -->
+  <backup name="Users.junsei">
+    <original storage="C" />
+    <copy level="daily" storage="D" history="Users.history.junsei" />
+    <copy level="monthly" storage="G" />
+  </backup>
+  <backup name="Users.history">
+    <original storage="D" />
+    <copy level="monthly" storage="G" />
+  </backup>
+
+  <backup name="blog">
+    <original storage="C" />
+    <copy storage="comb" />
+  </backup>
+
+  <!--
+  daily    -> { Common(C->D), VMs(C->D), Linux.junsei(STD->C,D), Users.junsei(C->D+history) }
+  monthly  -> { Common(C->G), VMs(C->G), Linux.junsei(STD->G),   Users.junsei(C->G), Users.history(D->G) }
+  (noname) -> { blog(C->comb) }
+  -->
+</database>

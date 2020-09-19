@@ -618,6 +618,7 @@ public class DataBase extends HashMap<String,DataBase.Storage> implements Closea
 
       Document xmldoc = DocumentBuilderFactory.newInstance().newDocumentBuilder().parse(descFilePath.toFile());
       NodeList children = xmldoc.getChildNodes().item(0).getChildNodes();
+      log.trace("children.length = "+children.getLength());
       for ( int i = 0; i < children.getLength(); ++i ) {
 	Element elem = selectElement(children.item(i));
 	if ( elem == null ) continue;
@@ -662,7 +663,7 @@ public class DataBase extends HashMap<String,DataBase.Storage> implements Closea
 	    parseFolders(elem.getChildNodes(),name,dir,null,folderdefMap,null,(n,p)->new LocalStorage(this,n,p));
 	  }
 	} else if ( tagname.equals("backup") ) {
-	  backup.registerElem(this,elem);
+	  backup.registerElem(this,elem,folderdefMap);
 	} else {
 	  unknown(elem);
 	}
