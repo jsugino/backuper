@@ -18,6 +18,7 @@ import java.text.ParseException;
 import java.text.SimpleDateFormat;
 import java.util.Base64;
 import java.util.Date;
+import java.util.Map;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedList;
@@ -580,6 +581,176 @@ public class DataBase extends HashMap<String,DataBase.Storage> implements Closea
     }
   }
 
+  @Override
+  public void close()
+  throws IOException
+  {
+    for ( Storage storage : values() ) storage.close();
+  }
+
+  // --------------------------------------------------
+  public String[][] toArray()
+  {
+    DoubleKeyHashMap<String,String,Storage> map = new DoubleKeyHashMap<>();
+    for ( Map.Entry<String,Storage> ent : this.entrySet() ) {
+      String key = ent.getKey();
+      Storage val = ent.getValue();
+      int idx = key.lastIndexOf('.');
+      String key1 = key.substring(0,idx);
+      String key2 = key.substring(idx+1);
+      map.put(key1,key2,val);
+    }
+
+    String arr[][] = new String [map.key1Set().size()][];
+    String min1[]  = new String[map.key1Set().size()];
+    String min2[]  = new String[map.key2Set().size()];
+    int cnt1 = 0;
+    int cnt2 = 0;
+
+    cnt1 = 0;
+    for ( String key1 : map.key1Set() ) {
+      arr[cnt1] = new String[min2.length];
+      cnt2 = 0;
+      for ( String key2 : map.key2Set() ) {
+	Storage val = map.get(key1,key2);
+	arr[cnt1][cnt2] = ( val == null ) ? null : val.getRoot();
+	++cnt2;
+      }
+      ++cnt1;
+    }
+
+    for ( cnt2 = 0; cnt2 < min2.length; ++cnt2 ) {
+      min2[cnt2] = null;
+      int num = 0;
+      for ( cnt1 = 0; cnt1 < min1.length; ++cnt1 ) {
+	if ( arr[cnt1][cnt2] != null ) {
+	  ++num;
+	  min2[cnt2] = truncCommonHead(min2[cnt2],arr[cnt1][cnt2]);
+	}
+      }
+      if ( num <= 1 ) {
+	min2[cnt2] = null;
+	continue;
+      }
+      int len = min2[cnt2].length();
+      if ( len > 0 && min2[cnt2].charAt(len-1) == '/' ) {
+	--len;
+	min2[cnt2] = min2[cnt2].substring(0,len);
+      }
+      for ( cnt1 = 0; cnt1 < min1.length; ++cnt1 ) {
+	String root = arr[cnt1][cnt2];
+	if ( root != null ) arr[cnt1][cnt2] = root.substring(len);
+      }
+    }
+
+    for ( cnt1 = 0; cnt1 < min1.length; ++cnt1 ) {
+      min1[cnt1] = null;
+      int num = 0;
+      for ( cnt2 = 0; cnt2 < min2.length; ++cnt2 ) {
+	if ( arr[cnt1][cnt2] != null ) {
+	  ++num;
+	  min1[cnt1] = truncCommonTail(min1[cnt1],arr[cnt1][cnt2]);
+	}
+      }
+      if ( num <= 1 ) {
+	min1[cnt1] = null;
+	continue;
+      }
+      int idx = min1[cnt1].indexOf('/');
+      if ( idx < 0 ) {
+	min1[cnt1] = "";
+	continue;
+      }
+      if ( idx > 0 ) {
+	min1[cnt1] = min1[cnt1].substring(idx);
+      }
+      int len = min1[cnt1].length();
+      for ( cnt2 = 0; cnt2 < min2.length; ++cnt2 ) {
+	String root = arr[cnt1][cnt2];
+	if ( root != null ) arr[cnt1][cnt2] = root.substring(0,root.length()-len);
+      }
+    }
+
+    String ret[][] = new String[min1.length+2][];
+    int cnt;
+
+    ret[0] = new String[min2.length+2];
+    cnt = 2;
+    for ( String key2 : map.key2Set() ) ret[0][cnt++] = key2;
+
+    ret[1] = new String[min2.length+2];
+    cnt = 2;
+    for ( int i = 0; i < min2.length; ++i ) ret[1][cnt++] = min2[i];
+
+    cnt = 0;
+    for ( String key1 : map.key1Set() ) {
+      ret[cnt+2] = new String[min2.length+2];
+      ret[cnt+2][0] = key1;
+      ret[cnt+2][1] = min1[cnt];
+      for ( int i = 0; i < min2.length; ++i ) ret[cnt+2][i+2] = arr[cnt][i];
+      ++cnt;
+    }
+
+    return ret;
+  }
+
+  public void printDataBase( PrintStream out )
+  {
+    String arr[][] = this.toArray();
+    for ( int i = 0; i < arr.length; ++i ) {
+      String line[] = arr[i];
+      for ( int j = 0; j < line.length; ++j ) {
+	if ( j > 0 ) out.print(',');
+	String root = arr[i][j];
+	if ( root == null ) continue;
+	if ( root.length() == 0 ) root = "/.";
+	out.print(root);
+      }
+      out.println();
+    }
+  }
+
+  public static String truncCommonHead( String str1, String str2 )
+  {
+    if ( str1 == null ) return str2;
+    if ( str2 == null ) return str1;
+    int len1 = str1.length();
+    int len2 = str2.length();
+    if ( len2 < len1 ) {
+      String str = str1; str1 = str2; str2 = str;
+      len1 = str1.length();
+      len2 = str2.length();
+    }
+    for ( int i = 0; i < len1; ++i ) {
+      if ( str1.charAt(i) != str2.charAt(i) ) {
+	str1 = str1.substring(0,i);
+	break;
+      }
+    }
+    return str1;
+  }
+
+  public static String truncCommonTail( String str1, String str2 )
+  {
+    if ( str1 == null ) return str2;
+    if ( str2 == null ) return str1;
+    int len1 = str1.length();
+    int len2 = str2.length();
+    if ( len2 < len1 ) {
+      String str = str1; str1 = str2; str2 = str;
+      len1 = str1.length();
+      len2 = str2.length();
+    }
+    for ( int i = 0; i < len1; ++i ) {
+      if ( str1.charAt(len1-i-1) != str2.charAt(len2-i-1) ) {
+	str1 = str1.substring(len1-i);
+	break;
+      }
+    }
+    return str1;
+  }
+
+  // ======================================================================
   public void initializeByFile( Path descFilePath )
   throws IOException
   {
@@ -796,12 +967,5 @@ public class DataBase extends HashMap<String,DataBase.Storage> implements Closea
     StringWriter out = new StringWriter();
     tf.transform(new DOMSource(node.cloneNode(false)), new StreamResult(out));
     return out.toString();
-  }
-
-  @Override
-  public void close()
-  throws IOException
-  {
-    for ( Storage storage : values() ) storage.close();
   }
 }

@@ -3,6 +3,9 @@ package mylib.backuper;
 import static mylib.backuper.BackuperTest.checkContents;
 import static mylib.backuper.BackuperTest.event;
 
+import static mylib.backuper.DataBase.truncCommonHead;
+import static mylib.backuper.DataBase.truncCommonTail;
+
 import static org.junit.Assert.assertEquals;
 
 import java.io.File;
@@ -474,6 +477,30 @@ public class DataBaseTest
   }
 
   @Test
+  public void testTrunc()
+  {
+    assertEquals(null,truncCommonHead(null,null));
+    assertEquals("str111",truncCommonHead("str111",null));
+    assertEquals("str222",truncCommonHead(null,"str222"));
+    assertEquals("",truncCommonHead("str111",""));
+    assertEquals("",truncCommonHead("","str222"));
+    assertEquals("str",truncCommonHead("str111","str222"));
+    assertEquals("str",truncCommonHead("str","str222"));
+    assertEquals("str",truncCommonHead("str111","str"));
+    assertEquals("",truncCommonHead("str111","STR222"));
+
+    assertEquals(null,truncCommonTail(null,null));
+    assertEquals("111str",truncCommonTail("111str",null));
+    assertEquals("222str",truncCommonTail(null,"222str"));
+    assertEquals("",truncCommonTail("111str",""));
+    assertEquals("",truncCommonTail("","222str"));
+    assertEquals("str",truncCommonTail("111str","222str"));
+    assertEquals("str",truncCommonTail("str","222str"));
+    assertEquals("str",truncCommonTail("111str","str"));
+    assertEquals("",truncCommonTail("111str","222STR"));
+  }
+
+  @Test
   public void dumpBackup()
   throws Exception
   {
@@ -484,58 +511,9 @@ public class DataBaseTest
 	.getResource("mylib/backuper/folders-2.conf.xml")
 	.getPath();
       Backup bk = db.initializeByXml(Paths.get(def));
-      DoubleKeyHashMap<String,String,Storage> map = new DoubleKeyHashMap<>();
-      for ( Map.Entry<String,Storage> ent : db.entrySet() ) {
-	String key = ent.getKey();
-	Storage val = ent.getValue();
-	assertEquals(key,val.storageName);
-	System.out.println("key = "+key+", name = "+val.storageName+", root = "+val.getRoot());
-	int idx = key.lastIndexOf('.');
-	String key1 = key.substring(0,idx);
-	String key2 = key.substring(idx+1);
-	map.put(key1,key2,val);
-      }
-      String min[] = new String[map.key2Set().size()];
-      int cnt = 0;
-      for ( String key2 : map.key2Set() ) {
-	min[cnt] = null;
-	for ( String key1 : map.key1Set() ) {
-	  Storage val = map.get(key1,key2);
-	  if ( val == null ) continue;
-	  String root = val.getRoot();
-	  if ( min[cnt] == null ) {
-	    min[cnt] = root;
-	    continue;
-	  }
-	  int len = Math.min(min[cnt].length(),root.length());
-	  for ( int i = 0; i < len; ++i ) {
-	    if ( min[cnt].charAt(i) != root.charAt(i) ) {
-	      min[cnt] = min[cnt].substring(0,i);
-	      break;
-	    }
-	  }
-	}
-	++cnt;
-      }
-      for ( String key2 : map.key2Set() ) {
-	System.out.print(",\t");
-	System.out.print(key2);
-      }
-      System.out.println();
-      for ( String com : min ) {
-	System.out.print(",\t");
-	System.out.print(com);
-      }
-      System.out.println();
-      for ( String key1 : map.key1Set() ) {
-	System.out.print(key1);
-	for ( String key2 : map.key2Set() ) {
-	  Storage val = map.get(key1,key2);
-	  System.out.print(",\t");
-	  if ( val != null ) System.out.print(val.getRoot());
-	}
-	System.out.println();
-      }
+      db.printDataBase(System.out);
+      bk.printTask(System.out);
     }
+    System.out.println("END!!");
   }
 }

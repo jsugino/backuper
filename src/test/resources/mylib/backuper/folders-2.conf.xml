@@ -94,7 +94,7 @@ Users
 
   <backup name="blog">
     <original storage="C" />
-    <copy storage="comb" />
+    <copy level="bupd" storage="comb" />
   </backup>
 
   <!--
