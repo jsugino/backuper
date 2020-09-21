@@ -1,5 +1,52 @@
 [Backuper の使い方]
 
+java -jar jarfiile.jar DicFolder [option] [level] [src [dst]]
+
+・DicFolder には、*.db ファイルと "folders.conf.xml" ファイルがあるフォルダを指定する。
+・levelで指定されたすべてタスクのコピー作業を実行する。
+・src が指定された場合、それがオリジナルとなるもののみを実行する。
+・dst が指定された場合、それがコピー先となるもののみを実行する。
+
+option	-l : ストレージやタスクを確認する。
+	-f : フルスキャンする (既存の *.db を無視する)
+	-s : 通常スキャンする
+	-n : スキャンしない (既存の *.db をそのまま使用する)
+	-d : ファイル単位のコピーをシミュレートする。(スキャンしない)
+
+(パラメータの例)
+タスク実行：
+daily
+	レベル daily のタスクを実行
+daily Common.C
+	ストレージ Common.C をオリジナルとするタスクを実行
+daily C
+	ドライブ C をオリジナルとするタスクを実行
+daily C D
+	ドライブ C から D へコピーするタスクを実行
+-d daily [src [dst]]
+	スキャンををせずにレベル daily のタスクのシミュレート
+-n daily [src [dst]]
+	スキャンををせずにレベル daily のタスクを実行
+
+確認：
+-l
+	すべてのタスクとストレージを表示
+-l C
+	Cドライブのストレージを表示
+-l daily [src [dst]]
+	レベル daily のタスクとストレージを表示
+	(src, dst が指定されていたら、そのドライブなどに限定)
+
+スキャン：
+-s daily | -f daily
+	関連するストレージの通常スキャン or フルスキャン
+-s C | -f C
+	Cドライブのすべてのストレージを通常スキャン or フルスキャン
+-s Common.C | -f Common.C
+	ストレージ Common.C の通常スキャン or フルスキャン
+
+[Backuper の使い方(旧)]
+
 java -jar jarfiile.jar [-dsl] DicFolder [SrcName] [DstName]
 
 DicFolder : 辞書ファイルやログファイルの格納場所
@@ -116,29 +163,29 @@ linux.dst2=/mnt/D/Linux/home/junsei
 DataBase クラスは "*.db" ファイルの読み書きを行う。
 
 	(e.g. "Linux.junsei.C")
-+----------+  storageName  +---------+
-| DataBase |-------------->| Storage | = "*.db"
-+----------+		   +---------+
-			     ^	    ^
-		  <<extens>> |	    | <<extens>>
-		+--------------+  +------------+
-		| LocalStorage |  | FtpStorage |
-		+--------------+  +------------+
++----------+  [storageName]  +---------+
+| DataBase |---------------->| Storage | = "*.db"
++----------+		     +---------+
+                               ^      ^
+                    <<extens>> |      | <<extens>>
+                  +--------------+  +------------+
+                  | LocalStorage |  | FtpStorage |
+                  +--------------+  +------------+
 
 Storage クラスに対しする操作で、実際のファイル読み書きができる。
 
 Backup クラスは、バックアップタスクを定義する。
 
-		  <<List>>
-+--------+ level +------+ +------+ +------+
-| Backup |-------| Task |-| Task |-| Task |
-+--------+	 +------+ +------+ +------+
-	     orig |   | copy <<List>>
-	+---------+  +---------+ +---------+ +---------+
-	| Storage |  | Storage |-| Storage |-| Storage |
-	+---------+  +---------+ +---------+ +---------+
-			  | history(*)		  | history(*)
-		     +---------+	     +---------+
-		     | Storage |	     | Storage |
-		     +---------+	     +---------+
-(*) 履歴用の Storage は historyStorages.get(storageName) で取得する。
+		    <<List>>
++--------+ [level]  +------+ +------+ +------+
+| Backup |--------> | Task |-| Task |-| Task |
++--------+          +------+ +------+ +------+
+                orig |    | copy <<List>>
+           +---------+    +---------+ +---------+ +---------+
+           | Storage |    | Storage |-| Storage |-| Storage |
+           +---------+    +---------+ +---------+ +---------+
+                               | history(※)           | history(※)
+                          +---------+             +---------+
+                          | Storage |             | Storage |
+                          +---------+             +---------+
+(※) 履歴用の Storage は historyStorages.get(storageName) で取得する。

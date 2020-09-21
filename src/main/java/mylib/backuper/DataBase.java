@@ -322,6 +322,17 @@ public class DataBase extends HashMap<String,DataBase.Storage> implements Closea
     }
 
     // --------------------------------------------------
+    /**
+     * フォルダを Scan する。
+     * - 次のものは無視され、その Folder ignores に追加される。
+     *   - ignoreFolderPats にマッチするフォルダ
+     *   - ignoreFilePats にマッチするファイル
+     *   - シンボリックリンク
+     * - 次のいずれかの場合、元の MD5 値は用いられない。(nullとなる)
+     *   - *.db 上にファイルが無い
+     *   - ファイル長が異なる
+     *   - 最終更新日時が異なる (厳密一致)
+     **/
     public void scanFolder()
     throws IOException
     {
@@ -390,6 +401,11 @@ public class DataBase extends HashMap<String,DataBase.Storage> implements Closea
       }
     }
 
+    /**
+     * 親フォルダを補完する。
+     * *.db の書き出し時には、ファイルを持たないフォルダは保存されない。
+     * そのため、readDB() 後には、scanFolder() か complementFolders() を呼び出す必要がある。
+     **/
     public void complementFolders()
     {
       HashSet<Path> exists = new HashSet<>();
@@ -411,6 +427,9 @@ public class DataBase extends HashMap<String,DataBase.Storage> implements Closea
       }
     }
 
+    /**
+     * ハッシュ値がnullのファイルを読み込み、MD5値を計算する。
+     **/
     public void updateHashvalue()
     throws IOException
     {
