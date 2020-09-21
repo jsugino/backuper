@@ -30,15 +30,13 @@
   <storage dir="/mnt/D" name="D">
     <folder ref="stdfolders" /> <!-- Linux.junsei.D, Common.D, VMs.D -->
     <folder dir="Users/junsei" /> <!-- Users.junsei.D -->
-    <folder dir="Users.history"> <!-- Users.history.D -->
-      <folder dir="junsei" name=".junsei"/> <!-- Users.history.junsei.D -->
-    </folder>
+    <folder dir="Users.history/junsei" /> <!-- Users.history.junsei.D -->
   </storage>
 
   <storage dir="/run/media/junsei/HD-LBU3" name="G">
     <folder ref="stdfolders" /> <!-- Linux.junsei.G, Common.G, VMs.G -->
     <folder dir="Users/junsei" /> <!-- Users.junsei.G -->
-    <folder dir="Users.history" /> <!-- Users.history.G -->
+    <folder dir="Users.history/junsei" /> <!-- Users.history.junsei.G -->
   </storage>
 
   <storage ftp="my.host.ne.jp" user="user" password="password" name="comb">
@@ -66,7 +64,7 @@
     <copy level="daily" storage="D" history="Users.history.junsei" />
     <copy level="monthly" storage="G" />
   </backup>
-  <backup name="Users.history">
+  <backup name="Users.history.junsei">
     <original storage="D" />
     <copy level="monthly" storage="G" />
   </backup>

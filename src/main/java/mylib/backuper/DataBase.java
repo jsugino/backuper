@@ -16,7 +16,9 @@ import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.text.ParseException;
 import java.text.SimpleDateFormat;
+import java.util.Arrays;
 import java.util.Base64;
+import java.util.Comparator;
 import java.util.Date;
 import java.util.Map;
 import java.util.HashMap;
@@ -769,6 +771,28 @@ public class DataBase extends HashMap<String,DataBase.Storage> implements Closea
     return str1;
   }
 
+  // --------------------------------------------------
+
+  public void printStorages( PrintStream out )
+  {
+    String keys[] = this.keySet().toArray(new String[0]);
+    Arrays.sort(keys);
+    for ( String key : keys ) {
+      Storage storage = this.get(key);
+      if ( storage.folders == null ) {
+	out.format("%-20s (no *.db file) %s",
+	  storage.storageName,
+	  storage.getRoot()).println();
+      } else {
+	out.format("%-20s %6d %7d %s",
+	  storage.storageName,
+	  storage.folderSize(),
+	  storage.fileSize(),
+	  storage.getRoot()).println();
+      }
+    }
+  }
+
   // ======================================================================
   public void initializeByFile( Path descFilePath )
   throws IOException
@@ -865,12 +889,13 @@ public class DataBase extends HashMap<String,DataBase.Storage> implements Closea
     return backup;
   }
 
-  public void parseFolders(
+  public int parseFolders(
     NodeList list, String driveName, String parentDir, String parentName,
     HashMap<String,String[]> folderdefMap, Storage curentStorage, BiFunction<String,Path,Storage> newFunc
   )
   throws IOException, TransformerException
   {
+    int subfolders = 0;
     for ( int i = 0; i < list.getLength(); ++i ) {
       Element folder = selectElement(list.item(i));
       if ( folder == null ) continue;
@@ -906,16 +931,28 @@ public class DataBase extends HashMap<String,DataBase.Storage> implements Closea
 	String newName = calcName(parentName,dir,name);
 	log.trace("calcName-2("+parentName+","+dir+","+name+")="+newName);
 	String newDir = parentDir+dir;
+	String strName = null;
 	Storage storage = null;
 	if ( newName != null ) {
-	  String strName = newName+'.'+driveName;
+	  strName = newName+'.'+driveName;
 	  storage = newFunc.apply(strName,Paths.get(newDir));
 	  log.trace("register new storage : "+strName+"="+storage.getRoot());
-	  this.put(strName,storage);
+	  //this.put(strName,storage);
 	}
-	parseFolders(folder.getChildNodes(),driveName,newDir+'/',newName,folderdefMap,storage,newFunc);
+	int num = parseFolders(folder.getChildNodes(),driveName,newDir+'/',newName,folderdefMap,storage,newFunc);
+	if ( num == 0 && newName != null ) {
+	  this.put(strName,storage);
+	  subfolders += 1;
+	} else {
+	  if ( name != null ) log.warn("Ignore name attribute ("+name+") of dir="+dir);
+	  if ( storage != null && (storage.ignoreFilePats.size() > 0 || storage.ignoreFolderPats.size() > 0) ) {
+	    log.warn("Ignore name <excludes> tag of dir="+dir);
+	  }
+	  subfolders += num;
+	}
       }
     }
+    return subfolders;
   }
 
   public static String calcName( String parentName, String dir, String name )
@@ -986,5 +1023,37 @@ public class DataBase extends HashMap<String,DataBase.Storage> implements Closea
     StringWriter out = new StringWriter();
     tf.transform(new DOMSource(node.cloneNode(false)), new StreamResult(out));
     return out.toString();
+  }
+
+  // --------------------------------------------------
+
+  public boolean checkConsistency()
+  {
+    String roots[] = this.keySet().toArray(new String[0]);
+
+    HashMap<String,Integer> counts = new HashMap<>();
+    for ( int i = 0; i < roots.length; ++i ) {
+      String str = roots[i].substring(0,roots[i].lastIndexOf('.'));
+      Integer num = counts.get(str);
+      counts.put(str,(num == null) ? 1 : num + 1);
+      roots[i] = this.get(roots[i]).getRoot();
+    }
+    for ( Map.Entry<String,Integer> ent : counts.entrySet() ) {
+      if ( ent.getValue() <= 1 ) {
+	log.warn("Only one storage name : "+ent.getKey());
+      }
+    }
+
+    Arrays.sort(roots,Comparator.comparingInt(root->root.length()));
+    for ( int i = 0; i < roots.length-1; ++i ) {
+      for ( int j = i+1; j < roots.length; ++j ) {
+	if ( roots[j].startsWith(roots[i]) ) {
+	  log.error("find nested storage: "+roots[j]+" in "+roots[i]);
+	  return false;
+	}
+      }
+    }
+
+    return true;
   }
 }

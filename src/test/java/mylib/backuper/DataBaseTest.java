@@ -302,24 +302,10 @@ public class DataBaseTest
       assertEquals(0,local.ignoreFilePats.size());
       assertEquals(0,local.ignoreFolderPats.size());
 
-      storage = db.remove("Users.history.D");
+      storage = db.remove("Users.history.junsei.G");
       assertEquals(LocalStorage.class,storage.getClass());
       local = new PublicLocalStorage(storage);
-      assertEquals(Paths.get("/mnt/D/Users.history"),local.rootFolder);
-      assertEquals(0,local.ignoreFilePats.size());
-      assertEquals(0,local.ignoreFolderPats.size());
-
-      storage = db.remove("Users.history.G");
-      assertEquals(LocalStorage.class,storage.getClass());
-      local = new PublicLocalStorage(storage);
-      assertEquals(Paths.get("/run/media/junsei/HD-LBU3/Users.history"),local.rootFolder);
-      assertEquals(0,local.ignoreFilePats.size());
-      assertEquals(0,local.ignoreFolderPats.size());
-
-      storage = db.remove("BACKUP.C");
-      assertEquals(LocalStorage.class,storage.getClass());
-      local = new PublicLocalStorage(storage);
-      assertEquals(Paths.get("/mnt/C/BACKUP"),local.rootFolder);
+      assertEquals(Paths.get("/run/media/junsei/HD-LBU3/Users.history/junsei"),local.rootFolder);
       assertEquals(0,local.ignoreFilePats.size());
       assertEquals(0,local.ignoreFolderPats.size());
 
@@ -387,7 +373,6 @@ public class DataBaseTest
       checkContents(
 	Main.listDB(db).stream().map(Storage::toString).collect(Collectors.toList()),
 	new String[]{
-	  "BACKUP.C=/mnt/C/BACKUP",
 	  "Common.C=/mnt/C/BACKUP/Common",
 	  "Common.D=/mnt/D/Common",
 	  "Common.G=/run/media/junsei/HD-LBU3/Common",
@@ -395,9 +380,8 @@ public class DataBaseTest
 	  "Linux.junsei.D=/mnt/D/Linux/home/junsei",
 	  "Linux.junsei.G=/run/media/junsei/HD-LBU3/Linux/home/junsei",
 	  "Linux.junsei.SSD=/home/junsei",
-	  "Users.history.D=/mnt/D/Users.history",
-	  "Users.history.G=/run/media/junsei/HD-LBU3/Users.history",
 	  "Users.history.junsei.D=/mnt/D/Users.history/junsei",
+	  "Users.history.junsei.G=/run/media/junsei/HD-LBU3/Users.history/junsei",
 	  "Users.junsei.C=/mnt/C/Users/junsei",
 	  "Users.junsei.D=/mnt/D/Users/junsei",
 	  "Users.junsei.G=/run/media/junsei/HD-LBU3/Users/junsei",
@@ -420,7 +404,7 @@ public class DataBaseTest
 	  "    VMs(C->G)",
 	  "    Linux.junsei(SSD->G)",
 	  "    Users.junsei(C->G)",
-	  "    Users.history(D->G)",
+	  "    Users.history.junsei(D->G)",
 	});
     }
   }
@@ -438,7 +422,6 @@ public class DataBaseTest
       checkContents(
 	Main.listDB(db).stream().map(Storage::toString).collect(Collectors.toList()),
 	new String[]{
-	  "BACKUP.C=/mnt/C/BACKUP",
 	  "Common.C=/mnt/C/BACKUP/Common",
 	  "Common.D=/mnt/D/Common",
 	  "Common.G=/run/media/junsei/HD-LBU3/Common",
@@ -446,9 +429,8 @@ public class DataBaseTest
 	  "Linux.junsei.D=/mnt/D/Linux/home/junsei",
 	  "Linux.junsei.G=/run/media/junsei/HD-LBU3/Linux/home/junsei",
 	  "Linux.junsei.SSD=/home/junsei",
-	  "Users.history.D=/mnt/D/Users.history",
-	  "Users.history.G=/run/media/junsei/HD-LBU3/Users.history",
 	  "Users.history.junsei.D=/mnt/D/Users.history/junsei",
+	  "Users.history.junsei.G=/run/media/junsei/HD-LBU3/Users.history/junsei",
 	  "Users.junsei.C=/mnt/C/Users/junsei",
 	  "Users.junsei.D=/mnt/D/Users/junsei",
 	  "Users.junsei.G=/run/media/junsei/HD-LBU3/Users/junsei",
@@ -459,7 +441,7 @@ public class DataBaseTest
 	  "blog.comb=ftp://my.host.ne.jp/www/blog",
 	});
       checkContents(bk::dump,new String[]{
-	  "(non)",
+	  "bupd",
 	  "    blog(C->comb)",
 	  "daily",
 	  "    Linux.junsei(C->D)",
@@ -471,7 +453,7 @@ public class DataBaseTest
 	  "    Common(C->G)",
 	  "    VMs(C->G)",
 	  "    Users.junsei(C->G)",
-	  "    Users.history(D->G)",
+	  "    Users.history.junsei(D->G)",
 	});
     }
   }
@@ -511,6 +493,27 @@ public class DataBaseTest
 	.getResource("mylib/backuper/folders-2.conf.xml")
 	.getPath();
       Backup bk = db.initializeByXml(Paths.get(def));
+
+      db.checkConsistency();
+      checkContents(db::printStorages,new String[]{
+	  "Common.C             (no *.db file) /mnt/C/BACKUP/Common",
+	  "Common.D             (no *.db file) /mnt/D/Common",
+	  "Common.G             (no *.db file) /run/media/junsei/HD-LBU3/Common",
+	  "Linux.junsei.C       (no *.db file) /mnt/C/BACKUP/Linux/home/junsei",
+	  "Linux.junsei.D       (no *.db file) /mnt/D/Linux/home/junsei",
+	  "Linux.junsei.G       (no *.db file) /run/media/junsei/HD-LBU3/Linux/home/junsei",
+	  "Linux.junsei.SSD     (no *.db file) /home/junsei",
+	  "Users.history.junsei.D (no *.db file) /mnt/D/Users.history/junsei",
+	  "Users.history.junsei.G (no *.db file) /run/media/junsei/HD-LBU3/Users.history/junsei",
+	  "Users.junsei.C       (no *.db file) /mnt/C/Users/junsei",
+	  "Users.junsei.D       (no *.db file) /mnt/D/Users/junsei",
+	  "Users.junsei.G       (no *.db file) /run/media/junsei/HD-LBU3/Users/junsei",
+	  "VMs.C                (no *.db file) /mnt/C/BACKUP/Virtual Machines",
+	  "VMs.D                (no *.db file) /mnt/D/Virtual Machines",
+	  "VMs.G                (no *.db file) /run/media/junsei/HD-LBU3/Virtual Machines",
+	  "blog.C               (no *.db file) /mnt/C/BACKUP/Downloads/5.blog",
+	  "blog.comb            (no *.db file) ftp://my.host.ne.jp/www/blog",
+	});
       db.printDataBase(System.out);
       bk.printTask(System.out);
     }

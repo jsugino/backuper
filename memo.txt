@@ -2,6 +2,7 @@ ToDo
 ・次のコマンドを実行して、DataBase の中身を整形して表示できるようにする。
   build -Dtest=DataBaseTest#dumpBackup test
   → (2020/9/20) まだ、一部しか実装できていない。
+
 ・db の一部を別の sub-db に分けられるようにする。
 ・<backup ref="stdfolders"> を実装したが、Linux.junsei について、もと
   の SSD->C,D,G と ref の方の C->D,G の二つが衝突してしまう。
@@ -27,6 +28,12 @@ ToDo
 ・ファイルの移動に対応する。
 
 ======================================================================
+2020/9/21
+・<folder> の下に <folder> があったら、その folder は Storage としては追加しないようにした。
+  その際、、
+  - もし、<excludes> があったら、log.warn() を呼び出す。
+  - もし、属性 "name" があったら、log.warn() を呼び出す。
+
 2019/4/6
 ・Derbyを使えるようにする準備として、Refactoring した。
 
