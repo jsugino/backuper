@@ -490,7 +490,7 @@ public class BackuperTest
       Main.exCommand = Main.Command.BACKUP_SKIPSCAN;
       DataBase.Storage srcStorage = db.get("test.src");
       DataBase.Storage dstStorage = db.get("test.dst");
-      Main.backup(srcStorage,dstStorage);
+      Main.backupEx(srcStorage,dstStorage);
       Main.exCommand = Main.Command.BACKUP_OR_SCANONLY;
     }
 
@@ -1200,14 +1200,14 @@ public class BackuperTest
 	for ( Task task : backup.get("daily") ) {
 	  for ( Storage copy : task.copyStorages ) {
 	    Storage his = task.historyStorages.get(copy.storageName);
-	    Main.backup(task.origStorage,copy,his);
+	    Main.backupEx(task.origStorage,copy,his);
 	  }
 	}
       } else {
 	db.initializeByFile(dbdir.toPath().resolve(Main.CONFIGNAME));
 	DataBase.Storage srcStorage = db.get("test.src");
 	DataBase.Storage dstStorage = db.get("test.dst");
-	Main.backup(srcStorage,dstStorage);
+	Main.backupEx(srcStorage,dstStorage);
       }
       return db;
     }

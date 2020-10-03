@@ -6,7 +6,7 @@
 
   <groupId>mylib</groupId>
   <artifactId>backuper</artifactId>
-  <version>0.0.2</version>
+  <version>0.1.0</version>
   <packaging>jar</packaging>
 
   <name>backuper</name>
@@ -27,6 +27,7 @@
 	  <!-- <target>1.8</target> -->
           <target>11</target>
           <encoding>UTF-8</encoding>
+	  <compilerArgument>-Xlint:deprecation,unchecked</compilerArgument>
 	  <useIncrementalCompilation>false</useIncrementalCompilation>
           <downloadSources>true</downloadSources>
           <downloadJavadocs>true</downloadJavadocs>
@@ -41,7 +42,7 @@
 	  <archive>
 	    <manifest>
 	      <!-- main method name has to be specified -->
-	      <mainClass>mylib.backuper.Main</mainClass>
+	      <mainClass>mylib.backuper.MainEx</mainClass>
 	    </manifest>
 	  </archive>
 	</configuration>

@@ -26,8 +26,8 @@ public class DoubleKeyHashMapTest
     assertEquals(false,itr1.hasNext());
 
     Iterator<Integer> itr2 = map.iterator2();
-    assertEquals(new Integer(1),itr2.next());
-    assertEquals(new Integer(2),itr2.next());
+    assertEquals(Integer.valueOf(1),itr2.next());
+    assertEquals(Integer.valueOf(2),itr2.next());
     assertEquals(false,itr2.hasNext());
   }
 }

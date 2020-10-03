@@ -24,7 +24,7 @@ import static mylib.backuper.DataBase.registerToList;
 
 public class Main
 {
-  private final static Logger log = LoggerFactory.getLogger(Main.class);
+  public final static Logger log = LoggerFactory.getLogger(Main.class);
 
   // execute commands
   static enum Command {
@@ -95,7 +95,7 @@ public class Main
 	  for ( Task task : getTaskList(backup,args) ) {
 	    for ( Storage copy : task.copyStorages ) {
 	      Storage his = task.historyStorages.get(copy.storageName);
-	      backup(task.origStorage,copy,his);
+	      backupEx(task.origStorage,copy,his);
 	    }
 	  }
 	}
@@ -108,7 +108,7 @@ public class Main
 	  if ( dstStorage == null ) {
 	    refresh(srcStorage);
 	  } else {
-	    backup(srcStorage,dstStorage);
+	    backupEx(srcStorage,dstStorage);
 	  }
 	}
 	break;
@@ -117,7 +117,7 @@ public class Main
 	{
 	  Storage srcStorage = getStorage(db,args);
 	  Storage dstStorage = getStorage(db,args);
-	  backup(srcStorage,dstStorage);
+	  backupEx(srcStorage,dstStorage);
 	}
 	break;
 
@@ -125,7 +125,7 @@ public class Main
 	{
 	  Storage srcStorage = getStorage(db,args);
 	  Storage dstStorage = getStorage(db,args);
-	  simulate(srcStorage,dstStorage);
+	  simulateEx(srcStorage,dstStorage);
 	}
 	break;
 
@@ -222,13 +222,13 @@ public class Main
     return tasklist;
   }
 
-  public static void backup( Storage srcStorage, Storage dstStorage )
+  public static void backupEx( Storage srcStorage, Storage dstStorage )
   throws IOException
   {
-    backup(srcStorage,dstStorage,null);
+    backupEx(srcStorage,dstStorage,null);
   }
 
-  public static void backup( Storage srcStorage, Storage dstStorage, Storage hisStorage )
+  public static void backupEx( Storage srcStorage, Storage dstStorage, Storage hisStorage )
   throws IOException
   {
     log.info("Start Backup "+srcStorage.storageName+" "+dstStorage.storageName);
@@ -255,6 +255,21 @@ public class Main
       }
     }
 
+    backup(srcStorage,dstStorage,hisStorage,true);
+
+    // write DB
+    srcStorage.writeDB();
+    dstStorage.writeDB();
+    if ( hisStorage != null ) {
+      hisStorage.writeDB();
+    }
+
+    log.info("End Backup "+srcStorage.storageName+" "+dstStorage.storageName);
+  }
+
+  public static void backup( Storage srcStorage, Storage dstStorage, Storage hisStorage, boolean forceCopy )
+  throws IOException
+  {
     log.debug("Compare Files "+srcStorage.storageName+" "+dstStorage.storageName);
     long unit = Math.max(srcStorage.timeUnit(),dstStorage.timeUnit());
     LinkedList<File> frlist = toFileList(srcStorage); // ソートされたListに変換
@@ -262,6 +277,8 @@ public class Main
     LinkedList<Path> difflist = compare(frlist,tolist,unit); // frlist, tolist にはそれ以外が残る。
 
     // tolist means "delete"
+    if ( tolist.size() > 10 && !forceCopy )
+      throw new UsageException("too many delete files : "+tolist.size());
     log.trace("start delete from "+dstStorage.getRoot());
     for ( File file : tolist ) {
       //file.dump(System.err);
@@ -327,15 +344,6 @@ public class Main
     for ( Path filePath : difflist ) {
       copyFile(srcStorage,dstStorage,filePath,hisStorage);
     }
-
-    // write DB
-    srcStorage.writeDB();
-    dstStorage.writeDB();
-    if ( hisStorage != null ) {
-      hisStorage.writeDB();
-    }
-
-    log.info("End Backup "+srcStorage.storageName+" "+dstStorage.storageName);
   }
 
   public static void copyFile( Storage srcStorage, Storage dstStorage, Path filePath, Storage hisStorage )
@@ -409,13 +417,18 @@ public class Main
     log.info("End Refresh "+storage.storageName);
   }
 
-  public static void simulate( Storage srcStorage, Storage dstStorage )
+  public static void simulateEx( Storage srcStorage, Storage dstStorage )
   throws IOException
   {
     log.info("Start Simulation "+srcStorage.storageName+" "+dstStorage.storageName);
     srcStorage.readDB();
     dstStorage.readDB();
+    simulate(srcStorage,dstStorage,null);
+  }
 
+  public static void simulate( Storage srcStorage, Storage dstStorage, Storage hisStorage )
+  throws IOException
+  {
     log.debug("Compare Files "+srcStorage.storageName+" "+dstStorage.storageName);
     long unit = Math.max(srcStorage.timeUnit(),dstStorage.timeUnit());
     LinkedList<File> frlist = toFileList(srcStorage); // ソートされたListに変換
@@ -425,7 +438,11 @@ public class Main
     // tolist means "delete"
     log.trace("simulate delete from "+dstStorage.getRoot());
     for ( File file : tolist ) {
-      log.info("delete "+file.filePath);
+      if ( hisStorage != null ) {
+	log.info("move as history "+file.filePath+" to "+hisStorage.storageName);
+      } else {
+	log.info("delete "+file.filePath);
+      }
     }
 
     // frlist means "copy"
