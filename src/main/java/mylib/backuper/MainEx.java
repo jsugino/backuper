@@ -33,15 +33,16 @@ public class MainEx
       Main.main(newa);
       return;
     }
+
     try {
+      MainEx command = new MainEx();
+      command.parseOption(argv,1);
+
       Path dbFolder = Paths.get(argv[0]);
       try ( DataBase database = new DataBase(dbFolder) ) {
 	if ( !Files.isReadable(dbFolder.resolve(CONFIGXML)) )
 	  throw new UsageException("No definition file "+CONFIGXML);
 	Backup bkTasks = database.initializeByXml(dbFolder.resolve(CONFIGXML));
-
-	MainEx command = new MainEx();
-	command.parseOption(argv,1);
 	command.execute(database,bkTasks);
       }
     } catch ( UsageException ex ) {
@@ -53,11 +54,10 @@ public class MainEx
       System.err.println("    dst       : destination id (ex. D, common.D, etc.)");
       System.err.println("  Option");
       System.err.println("    -l         : print definition");
-      System.err.println("    -f         : force execute (evan 10 or more delete files)");
-      System.err.println("    -s         : scan only (not update MD5)");
-      System.err.println("    -S         : full scan only (update MD5 for all files)");
-      System.err.println("    -n         : no scan (use *.db only)");
-      System.err.println("    -d         : simulate file copy (no scan)");
+      System.err.println("    -f         : force execute (evan 10 or more delete or override files)");
+      System.err.println("    -s         : scan only");
+      System.err.println("    -n         : no preparation");
+      System.err.println("    -d         : simulate");
     } catch ( Exception ex ) {
       log.error(ex.getMessage(),ex);
     }
@@ -66,7 +66,7 @@ public class MainEx
   // ----------------------------------------------------------------------
   public String option = "";
   public boolean forceCopy = false;
-  public boolean doScan = true;
+  public boolean doPrepare = true;
   public boolean doExecute = true;
   public String arg1 = null;
   public String arg2 = null;
@@ -75,18 +75,49 @@ public class MainEx
   public void parseOption( String argv[], int argcnt )
   {
     if ( argv.length < argcnt+1 ) throw new UsageException("Less arguments");
-    while ( argv[argcnt].length() > 0 && argv[argcnt].charAt(0) == '-' ) {
+
+    if ( argv[argcnt].length() > 0 && argv[argcnt].charAt(0) == '-' ) {
       option = argv[argcnt++];
-      int idx = option.indexOf('f',1);
-      if ( idx > 0 ) {
-	forceCopy = true;
-	if ( option.length() == 2 ) {
-	  option = "";
-	  continue;
+
+      String opts[] = new String[]{
+	"", "-d", "-l", "-f",
+	"-s", "-sn", "-ns",
+	"-n", "-fn", "-nf",
+	"-nd", "-dn",
+      };
+      for ( int i = 0; i < opts.length; ++i ) {
+	if ( option.equals(opts[i]) ) {
+	  opts = null;
+	  break;
 	}
-	option = "-"+option.substring(1,idx)+option.substring(idx+1);
       }
-      break;
+      if ( opts != null )
+	throw new UsageException("Unknown option : "+option);
+
+      int idx = 1;
+      while ( idx < option.length() ) {
+	boolean find = false;
+	switch ( option.charAt(idx) ) {
+	case 'f':
+	  forceCopy = true;
+	  find = true;
+	  break;
+	case 'n':
+	  doPrepare = false;
+	  find = true;
+	  break;
+	case 'd':
+	  doExecute = false;
+	  find = true;
+	  break;
+	}
+	if ( find ) {
+	  option = option.substring(0,idx)+option.substring(idx+1);
+	} else {
+	  ++idx;
+	}
+      }
+      if ( option.equals("-") ) option = "";
     }
     if ( argcnt < argv.length ) arg1 = argv[argcnt++];
     if ( argcnt < argv.length ) arg2 = argv[argcnt++];
@@ -99,27 +130,7 @@ public class MainEx
   {
 
     if ( option.equals("") ) {
-      throw new UsageException("'execute task' is not implemented)");
-
-    } else if ( option.equals("-l") ) {
-      throw new UsageException("'print definition' is not implemented)");
-
-    } else if ( option.equals("-S" ) ) {
-      if ( arg1 == null ) throw new UsageException("no argument for -S");
-      Storage storage = database.get(arg1);
-      if ( storage != null ) {
-	if ( arg2 != null ) throw new UsageException("Unused arguments "+arg2);
-	fullScan(storage);
-      } else {
-	throw new UsageException("Unknown ID "+arg1);
-      }
-
-    } else if ( option.equals("-s" ) ) {
-      System.out.println("scan (not implemented)");
-
-    } else if ( option.equals("-n" ) ) {
-      doScan = false;
-      if ( arg1 == null ) throw new UsageException("no argument for -n");
+      if ( arg1 == null ) throw new UsageException("no argument");
       List<Task> tasks = bkTasks.get(arg1);
       if ( tasks != null ) {
 	log.info("backup without scan by level : "+arg1);
@@ -128,32 +139,35 @@ public class MainEx
 	throw new UsageException("Unknown ID "+arg1);
       }
 
-    } else if ( option.equals("-d" ) ) {
-      doScan = false;
-      doExecute = false;
-      if ( arg1 == null ) throw new UsageException("no argument for -d");
-      List<Task> tasks = bkTasks.get(arg1);
-      if ( tasks != null ) {
-	log.info("simulate by level : "+arg1);
-	backup(tasks);
+    } else if ( option.equals("-l") ) {
+      database.printDataBase(System.out);
+      bkTasks.printTask(System.out);
+
+    } else if ( option.equals("-s" ) ) {
+      if ( arg1 == null ) throw new UsageException("no argument for -s");
+      Storage storage = database.get(arg1);
+      if ( storage != null ) {
+	if ( arg2 != null ) throw new UsageException("Unused arguments "+arg2);
+	log.info("Start Refresh "+storage.storageName);
+	storage.readDB();
+	storage.scanFolder();
+	storage.updateHashvalue(!doPrepare);
+	storage.writeDB();
+	log.info("End Refresh "+storage.storageName);
       } else {
 	throw new UsageException("Unknown ID "+arg1);
       }
+
     } else {
       throw new UsageException("undefined option "+option);
     }
   }
 
   // ----------------------------------------------------------------------
-  public void fullScan( Storage storage )
-  {
-    throw new UsageException("fullScan() is not implemented)");
-  }
-
   /**
    * レベルに対するバックアップ処理を行う。
    *
-   * @param doScan true のとき、スキャンする
+   * @param doPrepare true のとき、スキャンする
    * @param doExecute true のとき、コピーを実行する
    */
   public void backup( List<Task> tasks )
@@ -179,14 +193,14 @@ public class MainEx
   }
 
   /**
-   * readDB() した後に doScan により scanFolder() か complementFolders() を呼び出す。
+   * readDB() した後に doPrepare により scanFolder() か complementFolders() を呼び出す。
    **/
   public void prepareDB( Storage storage )
   throws IOException
   {
     if ( storage == null ) return;
     storage.readDB();
-    if ( doScan ) {
+    if ( doPrepare ) {
       storage.scanFolder();
     } else {
       storage.complementFolders();
@@ -197,7 +211,7 @@ public class MainEx
   throws IOException
   {
     if ( storage == null ) return;
-    if ( doExecute ) {
+    if ( doPrepare || doExecute ) {
       storage.writeDB();
     }
   }

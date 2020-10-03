@@ -432,12 +432,18 @@ public class DataBase extends HashMap<String,DataBase.Storage> implements Closea
     /**
      * ハッシュ値がnullのファイルを読み込み、MD5値を計算する。
      **/
-    public void updateHashvalue()
+    public void updateHashvalue( boolean forceRead )
     throws IOException
     {
       for ( Folder folder : folders ) {
 	for ( File file : folder.files ) {
-	  if ( file.hashValue == null ) file.hashValue = getMD5(file.filePath);
+	  if ( file.hashValue == null || forceRead ) {
+	    String orig = file.hashValue;
+	    file.hashValue = getMD5(file.filePath);
+	    if ( orig != null && !file.hashValue.equals(orig) ) {
+	      log.warn("MD5 is different "+file.filePath);
+	    }
+	  }
 	}
       }
     }

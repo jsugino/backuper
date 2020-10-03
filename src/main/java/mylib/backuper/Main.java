@@ -277,8 +277,10 @@ public class Main
     LinkedList<Path> difflist = compare(frlist,tolist,unit); // frlist, tolist にはそれ以外が残る。
 
     // tolist means "delete"
-    if ( tolist.size() > 10 && !forceCopy )
-      throw new UsageException("too many delete files : "+tolist.size());
+    if ( tolist.size() > 10 && !forceCopy ) {
+      log.error("too many delete files : "+tolist.size());
+      return;
+    }
     log.trace("start delete from "+dstStorage.getRoot());
     for ( File file : tolist ) {
       //file.dump(System.err);
@@ -412,7 +414,7 @@ public class Main
     log.info("Start Refresh "+storage.storageName);
     storage.readDB();
     storage.scanFolder();
-    storage.updateHashvalue();
+    storage.updateHashvalue(false);
     storage.writeDB();
     log.info("End Refresh "+storage.storageName);
   }
