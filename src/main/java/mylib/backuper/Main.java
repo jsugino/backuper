@@ -236,14 +236,14 @@ public class Main
     if ( exCommand == Command.BACKUP_SKIPSCAN ) {
       srcStorage.complementFolders();
     } else {
-      srcStorage.scanFolder();
+      srcStorage.scanFolder(true);
     }
 
     dstStorage.readDB();
     if ( exCommand == Command.BACKUP_SKIPSCAN ) {
       dstStorage.complementFolders();
     } else {
-      dstStorage.scanFolder();
+      dstStorage.scanFolder(true);
     }
 
     if ( hisStorage != null ) {
@@ -251,7 +251,7 @@ public class Main
       if ( exCommand == Command.BACKUP_SKIPSCAN ) {
 	hisStorage.complementFolders();
       } else {
-	hisStorage.scanFolder();
+	hisStorage.scanFolder(true);
       }
     }
 
@@ -365,8 +365,8 @@ public class Main
 
     if ( srcFile.length == dstFile.length ) {
       log.trace("same length");
-      if ( srcFile.hashValue == null ) srcFile.hashValue = srcStorage.getMD5(filePath);
-      if ( dstFile.hashValue == null ) dstFile.hashValue = dstStorage.getMD5(filePath);
+      if ( srcFile.hashValue == null ) srcFile.hashValue = srcStorage.getMD5(filePath,false);
+      if ( dstFile.hashValue == null ) dstFile.hashValue = dstStorage.getMD5(filePath,false);
       if ( srcFile.hashValue.equals(dstFile.hashValue) ) {
 	log.trace("same hashValue");
 	if ( srcFile.lastModified/unit != dstFile.lastModified/unit ) {
@@ -413,7 +413,7 @@ public class Main
   {
     log.info("Start Refresh "+storage.storageName);
     storage.readDB();
-    storage.scanFolder();
+    storage.scanFolder(true);
     storage.updateHashvalue(false);
     storage.writeDB();
     log.info("End Refresh "+storage.storageName);

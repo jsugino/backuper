@@ -335,7 +335,7 @@ public class DataBase extends HashMap<String,DataBase.Storage> implements Closea
      *   - ファイル長が異なる
      *   - 最終更新日時が異なる (厳密一致)
      **/
-    public void scanFolder()
+    public void scanFolder( boolean checkLastModified )
     throws IOException
     {
       log.info("Scan Folder "+storageName+' '+getRoot());
@@ -344,22 +344,15 @@ public class DataBase extends HashMap<String,DataBase.Storage> implements Closea
       folders = new LinkedList<Folder>();
       LinkedList<Folder> folderList = new LinkedList<>();
       folderList.add(new Folder(Paths.get(".")));
-      int counter = 0;
-      int lastcnt = 0;
-      long startTime = System.currentTimeMillis();
+      PeriodicLogger period = new PeriodicLogger();
       while ( folderList.size() > 0 ) {
 	Folder folder = folderList.remove();
 	log.trace("new Folder "+folder.folderPath);
 	registerToList(folders,folder);
 	nextPath:
 	for ( PathHolder holder : getPathHolderList(folder.folderPath) ) {
-	  ++counter;
 	  Path relpath = holder.getPath();
-	  if ( (System.currentTimeMillis()-startTime) > 5000L ) {
-	    System.err.println(""+counter+" (+"+(counter-lastcnt)+") : "+relpath);
-	    startTime += 5000L;
-	    lastcnt = counter;
-	  }
+	  period.logging(relpath);
 	  if ( holder instanceof Folder ) {
 	    log.trace("scan folder "+relpath);
 	    for ( Pattern pat : ignoreFolderPats ) {
@@ -394,13 +387,14 @@ public class DataBase extends HashMap<String,DataBase.Storage> implements Closea
 	      (origfolder = findFromList(origFolders,folder.folderPath)) != null &&
 	      (origfile = findFromList(origfolder.files,relpath)) != null &&
 	      file.length == origfile.length &&
-	      file.lastModified == origfile.lastModified
+	      (!checkLastModified || file.lastModified == origfile.lastModified)
 	    ) {
 	      file.hashValue = origfile.hashValue;
 	    }
 	  }
 	}
       }
+      period.last();
     }
 
     /**
@@ -435,17 +429,20 @@ public class DataBase extends HashMap<String,DataBase.Storage> implements Closea
     public void updateHashvalue( boolean forceRead )
     throws IOException
     {
+      PeriodicLogger period = new PeriodicLogger();
       for ( Folder folder : folders ) {
 	for ( File file : folder.files ) {
+	  if ( forceRead ) period.logging(file.filePath);
 	  if ( file.hashValue == null || forceRead ) {
 	    String orig = file.hashValue;
-	    file.hashValue = getMD5(file.filePath);
+	    file.hashValue = getMD5(file.filePath,forceRead);
 	    if ( orig != null && !file.hashValue.equals(orig) ) {
 	      log.warn("MD5 is different "+file.filePath);
 	    }
 	  }
 	}
       }
+      if ( forceRead ) period.last();
     }
 
     // --------------------------------------------------
@@ -460,11 +457,14 @@ public class DataBase extends HashMap<String,DataBase.Storage> implements Closea
     }
 
     // --------------------------------------------------
-    public String getMD5( Path path )
+    public String getMD5( Path path, boolean forceRead )
     throws IOException
     {
-      log.info("calculate MD5 "+storageName+" "+path);
-
+      if ( forceRead ) {
+	log.trace("calculate MD5 "+storageName+" "+path);
+      } else {
+	log.info("calculate MD5 "+storageName+" "+path);
+      }
       digest.reset();
       try ( InputStream in = newInputStream(path) )
       {
@@ -1061,5 +1061,36 @@ public class DataBase extends HashMap<String,DataBase.Storage> implements Closea
     }
 
     return true;
+  }
+
+  // ==================================================
+  public static class PeriodicLogger
+  {
+    public int counter;
+    public int lastcnt;
+    public long startTime;
+
+    public PeriodicLogger()
+    {
+      counter = 0;
+      lastcnt = -1;
+      startTime = System.currentTimeMillis();
+    }
+
+    public void logging( Path path )
+    {
+      ++counter;
+      if ( (System.currentTimeMillis()-startTime) > 5000L ) {
+	if ( lastcnt < 0 ) lastcnt = 0;
+	System.err.println(""+counter+" (+"+(counter-lastcnt)+") : "+path);
+	startTime += 5000L;
+	lastcnt = counter;
+      }
+    }
+
+    public void last()
+    {
+      if ( lastcnt > 0 ) System.err.println(""+counter+" (last)");
+    }
   }
 }

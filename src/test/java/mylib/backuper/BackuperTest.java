@@ -931,7 +931,7 @@ public class BackuperTest
     try ( DataBase db = new DataBase(dbdir.toPath()) ) {
       db.initializeByFile(dbdir.toPath().resolve(Main.CONFIGNAME));
       DataBase.Storage storage = db.get("test.src");
-      storage.scanFolder();
+      storage.scanFolder(true);
       checkContents(storage::dump, new String[]{
 	  ".	*",
 	  "dirx	*",
@@ -971,7 +971,7 @@ public class BackuperTest
     try ( DataBase db = new DataBase(dbdir.toPath()) ) {
       db.initializeByFile(dbdir.toPath().resolve(Main.CONFIGNAME));
       DataBase.Storage storage = db.get("test.src");
-      storage.scanFolder();
+      storage.scanFolder(true);
       checkContents(storage::dump, new String[]{
 	  ".	*",
 	  "dirx	*",
@@ -1011,7 +1011,7 @@ public class BackuperTest
     try ( DataBase db = new DataBase(dbdir.toPath()) ) {
       db.initializeByFile(dbdir.toPath().resolve(Main.CONFIGNAME));
       DataBase.Storage storage = db.get("test.src");
-      storage.scanFolder();
+      storage.scanFolder(true);
       checkContents(storage::dump, new String[]{
 	  ".	*",
 	  "dirx	*",
@@ -1051,7 +1051,7 @@ public class BackuperTest
     try ( DataBase db = new DataBase(dbdir.toPath()) ) {
       db.initializeByFile(dbdir.toPath().resolve(Main.CONFIGNAME));
       DataBase.Storage storage = db.get("test.src");
-      storage.scanFolder();
+      storage.scanFolder(true);
       checkContents(storage::dump, new String[]{
 	  ".	*",
 	  "dirx	*",
@@ -1091,7 +1091,7 @@ public class BackuperTest
     try ( DataBase db = new DataBase(dbdir.toPath()) ) {
       db.initializeByFile(dbdir.toPath().resolve(Main.CONFIGNAME));
       DataBase.Storage storage = db.get("test.src");
-      storage.scanFolder();
+      storage.scanFolder(true);
       checkContents(storage::dump, new String[]{
 	  ".	*",
 	  "dirx	*",
@@ -1131,7 +1131,7 @@ public class BackuperTest
     try ( DataBase db = new DataBase(dbdir.toPath()) ) {
       db.initializeByFile(dbdir.toPath().resolve(Main.CONFIGNAME));
       DataBase.Storage storage = db.get("test.src");
-      storage.scanFolder();
+      storage.scanFolder(true);
       checkContents(storage::dump, new String[]{
 	  ".	*",
 	  "dirx	*",

@@ -573,7 +573,7 @@ public class FtpTest
       });
     try ( DataBase db = new DataBase(dbdir.toPath()) ) {
       Storage sto = db.get("test.dst");
-      sto.scanFolder();
+      sto.scanFolder(true);
       System.out.println("-- dump -- start");
       sto.dump(System.out);
       System.out.println("-- dump -- end");

@@ -133,7 +133,7 @@ public class MainEx
       if ( arg1 == null ) throw new UsageException("no argument");
       List<Task> tasks = bkTasks.get(arg1);
       if ( tasks != null ) {
-	log.info("backup without scan by level : "+arg1);
+	log.info("Backup with level : "+arg1);
 	backup(tasks);
       } else {
 	throw new UsageException("Unknown ID "+arg1);
@@ -150,7 +150,7 @@ public class MainEx
 	if ( arg2 != null ) throw new UsageException("Unused arguments "+arg2);
 	log.info("Start Refresh "+storage.storageName);
 	storage.readDB();
-	storage.scanFolder();
+	storage.scanFolder(false);
 	storage.updateHashvalue(!doPrepare);
 	storage.writeDB();
 	log.info("End Refresh "+storage.storageName);
@@ -201,7 +201,7 @@ public class MainEx
     if ( storage == null ) return;
     storage.readDB();
     if ( doPrepare ) {
-      storage.scanFolder();
+      storage.scanFolder(true);
     } else {
       storage.complementFolders();
     }
