@@ -7,6 +7,7 @@ import java.nio.file.Paths;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.ListIterator;
@@ -426,6 +427,7 @@ public class Main
     srcStorage.readDB();
     dstStorage.readDB();
     simulate(srcStorage,dstStorage,null);
+    log.info("End Simulation "+srcStorage.storageName+" "+dstStorage.storageName);
   }
 
   public static void simulate( Storage srcStorage, Storage dstStorage, Storage hisStorage )
@@ -458,8 +460,6 @@ public class Main
     for ( Path path : difflist ) {
       log.info("copy override "+path);
     }
-
-    log.info("End Simulation "+srcStorage.storageName+" "+dstStorage.storageName);
   }
 
   public static List<Storage> listDB( DataBase db )
@@ -471,6 +471,24 @@ public class Main
       list.add(db.get(key));
     }
     return list;
+  }
+
+  public static void rearrange( Storage srcStorage, Storage dstStorage, boolean doMove )
+  {
+    log.debug("Compare Files "+srcStorage.storageName+" "+dstStorage.storageName);
+    long unit = Math.max(srcStorage.timeUnit(),dstStorage.timeUnit());
+    LinkedList<File> frlist = toFileList(srcStorage); // ソートされたListに変換
+    LinkedList<File> tolist = toFileList(dstStorage); // ソートされたListに変換
+    LinkedList<Path> difflist = compare(frlist,tolist,unit); // frlist, tolist にはそれ以外が残る。
+
+    HashMap<String,File> frmap = new HashMap<>();
+    frlist.stream().forEach(f->{if (f.hashValue != null) frmap.put(f.hashValue,f);});
+    for ( File file : tolist ) {
+      if ( file.hashValue == null ) continue;
+      File orig = frmap.get(file.hashValue);
+      if ( orig == null ) continue;
+      log.info("move from "+file.filePath+" to "+orig.filePath);
+    }
   }
 
   // ======================================================================

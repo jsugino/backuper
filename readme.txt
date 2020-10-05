@@ -36,6 +36,8 @@ daily C
 	ドライブ C をオリジナルとするタスクを実行
 daily C D
 	ドライブ C から D へコピーするタスクを実行
+Common C D
+	ストレージ Common.C から Common.D へコピーするタスクを実行
 -d daily [src [dst]]
 	レベル daily のタスクをシミュレート(コピーしない)
 -n daily [src [dst]]
