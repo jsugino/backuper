@@ -1,7 +1,6 @@
 package mylib.backuper;
 
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.fail;
+import static org.junit.Assert.*;
 
 import java.io.BufferedReader;
 import java.io.ByteArrayInputStream;
@@ -301,9 +300,9 @@ public class BackuperTest
 	  "mkdir test.dst g1/g2",
 	  "mkdir test.dst g1/g2/g3",
 	  "delete y/y2",
-	  "rmdir z",
-	  "rmdir z/z1",
-	  "rmdir z/z1/z2",
+	  "rmdir test.dst z",
+	  "rmdir test.dst z/z1",
+	  "rmdir test.dst z/z1/z2",
 	  "delete z/za",
 	  "delete z/z1/zb",
 	  "delete z/z1/z2/zc",
@@ -419,7 +418,7 @@ public class BackuperTest
 	  "mkdir test.dst 4",
 	  "copy 4/1",
 	  "delete 5/1",
-	  "rmdir 5",
+	  "rmdir test.dst 5",
 	  "copy 5",
 	  "copy 6/1",
 	  "delete 6/3",
@@ -617,9 +616,9 @@ public class BackuperTest
 	  "delete 2/1",
 	  "delete 2/2",
 	  "delete 2/3",
-	  "rmdir 2",
+	  "rmdir test.dst 2",
 	  "delete 3/0",
-	  "rmdir 3",
+	  "rmdir test.dst 3",
 	  // ToDo: 本来は、次のようになるべき。
 	  /*
 	  "mkdir 1",
@@ -632,6 +631,419 @@ public class BackuperTest
 	},
 	"Write DataBase test.src "+dbdir+"/test.src.db",
       });
+  }
+
+  // ディレクトリ内のファイル移動があった場合のテスト：相手フォルダ内で移動
+  @Test
+  public void testMove1()
+  throws Exception
+  {
+    File root = tempdir.getRoot();
+    File dbdir = new File(root,"dic");
+    File srcdir = new File(root,"src");
+    File dstdir = new File(root,"dst");
+    Long current = System.currentTimeMillis() - 10000L;
+
+    // prepareMove()
+    createFiles(root,new Object[]{
+	"dic", new Object[]{
+	  Main.CONFIGNAME, new String[]{
+	    "test.src="+srcdir.getAbsolutePath(),
+	    "test.dst="+dstdir.getAbsolutePath(),
+	  },
+	},
+	"src", new Object[]{
+	  "1", new Object[]{
+	    "11", "1 1", current,
+	    "12", "1 22", current,
+	    "13", "1 333", current,
+	  },
+	  "2", new Object[]{
+	    "21", "2222 1", current,
+	    "22", "2222 22", current,
+	    "23", "2222 333", current,
+	  },
+	},
+	"dst", new Object[]{
+	},
+      });
+
+    try ( DataBase db = new DataBase(dbdir.toPath()) ) {
+      db.initializeByFile(dbdir.toPath().resolve(Main.CONFIGNAME));
+      DataBase.Storage srcStorage = db.get("test.src");
+      DataBase.Storage dstStorage = db.get("test.dst");
+      Main.backupEx(srcStorage,dstStorage);
+
+      checkContents(dstStorage::dump, new String[]{
+	  ".	0",
+	  "1	0",
+	  "dcEk+ueouLiRg9TeGWYTsw	*	3	11",
+	  "EfTe6lKqT1IwiZkZWQbqlw	*	4	12",
+	  "r0ZBQ2Mlb/HCYsZUPQqZgQ	*	5	13",
+	  "2	0",
+	  "NH2v5b4mmi333Z4HjBOpBg	*	6	21",
+	  "TuT+zXiKMLRVFBB3gBLbwg	*	7	22",
+	  "wFgRwqYBVwn6/lCUAgzkIg	*	8	23",
+	});
+    }
+
+    compareFiles(dstdir,new Object[]{
+	"1", new Object[]{
+	  "11", "1 1", current,
+	  "12", "1 22", current,
+	  "13", "1 333", current,
+	},
+	"2", new Object[]{
+	  "21", "2222 1", current,
+	  "22", "2222 22", current,
+	  "23", "2222 333", current,
+	},
+      });
+
+    checkEvent(new Object[]{
+	"Compare Files test.src test.dst", new String[]{
+	  "mkdir test.dst 1",
+	  "copy 1/11",
+	  "copy 1/12",
+	  "copy 1/13",
+	  "mkdir test.dst 2",
+	  "copy 2/21",
+	  "copy 2/22",
+	  "copy 2/23",
+	},
+	"Write DataBase test.src "+dbdir+"/test.src.db",
+      });
+    initEvent();
+
+    // ----------------------------------------------------------------------
+    assertTrue(new File(dstdir,"2").renameTo(new File(dstdir,"3")));
+
+    try ( DataBase db = new DataBase(dbdir.toPath()) ) {
+      db.initializeByFile(dbdir.toPath().resolve(Main.CONFIGNAME));
+      DataBase.Storage srcStorage = db.get("test.src");
+      DataBase.Storage dstStorage = db.get("test.dst");
+      srcStorage.readDB();
+      srcStorage.scanFolder(false,false);
+      dstStorage.readDB();
+      dstStorage.scanFolder(false,false);
+      dstStorage.updateHashvalue(false);
+      Main.rearrange(srcStorage,dstStorage,true);
+      dstStorage.cleanupFolder();
+      srcStorage.writeDB();
+      dstStorage.writeDB();
+
+      checkContents(dstStorage::dump, new String[]{
+	  ".	0",
+	  "1	0",
+	  "dcEk+ueouLiRg9TeGWYTsw	*	3	11",
+	  "EfTe6lKqT1IwiZkZWQbqlw	*	4	12",
+	  "r0ZBQ2Mlb/HCYsZUPQqZgQ	*	5	13",
+	  "2	0",
+	  "NH2v5b4mmi333Z4HjBOpBg	*	6	21",
+	  "TuT+zXiKMLRVFBB3gBLbwg	*	7	22",
+	  "wFgRwqYBVwn6/lCUAgzkIg	*	8	23",
+	});
+    }
+
+    checkEvent(new Object[]{
+	"Rearrange Files test.src test.dst", new String[]{
+	  "mkdir test.dst 2",
+	  "move 3/21 2/21",
+	  "move 3/22 2/22",
+	  "move 3/23 2/23",
+	  "rmdir test.dst 3",
+	},
+	"Write DataBase test.src "+dbdir+"/test.src.db",
+      });
+    initEvent();
+  }
+
+  @Test
+  public void testMove2()
+  throws Exception
+  {
+    File root = tempdir.getRoot();
+    File dbdir = new File(root,"dic");
+    File srcdir = new File(root,"src");
+    File dstdir = new File(root,"dst");
+    Long current = System.currentTimeMillis() - 10000L;
+
+    // prepareMove()
+    createFiles(root,new Object[]{
+	"dic", new Object[]{
+	  Main.CONFIGNAME, new String[]{
+	    "test.src="+srcdir.getAbsolutePath(),
+	    "test.dst="+dstdir.getAbsolutePath(),
+	  },
+	},
+	"src", new Object[]{
+	  "1", new Object[]{
+	    "11", "1 1", current,
+	    "12", "1 22", current,
+	    "13", "1 333", current,
+	  },
+	  "x", new Object[]{
+	    "2", new Object[]{
+	      "21", "2222 1", current,
+	      "22", "2222 22", current,
+	      "23", "2222 333", current,
+	    },
+	  },
+	},
+	"dst", new Object[]{
+	},
+      });
+
+    try ( DataBase db = new DataBase(dbdir.toPath()) ) {
+      db.initializeByFile(dbdir.toPath().resolve(Main.CONFIGNAME));
+      DataBase.Storage srcStorage = db.get("test.src");
+      DataBase.Storage dstStorage = db.get("test.dst");
+      srcStorage.scanFolder(false,false);
+      dstStorage.scanFolder(false,false);
+      Main.backup(srcStorage,dstStorage,null,true);
+      srcStorage.writeDB();
+      dstStorage.writeDB();
+    }
+    initEvent();
+
+    // ----------------------------------------------------------------------
+    assertTrue(new File(dstdir,"x/2/21").renameTo(new File(dstdir,"21")));
+    assertTrue(new File(dstdir,"x/2/22").renameTo(new File(dstdir,"22")));
+    assertTrue(new File(dstdir,"x/2/23").renameTo(new File(dstdir,"23")));
+    assertTrue(new File(dstdir,"x/2").delete());
+    assertTrue(new File(dstdir,"x").delete());
+
+    try ( DataBase db = new DataBase(dbdir.toPath()) ) {
+      db.initializeByFile(dbdir.toPath().resolve(Main.CONFIGNAME));
+      DataBase.Storage srcStorage = db.get("test.src");
+      DataBase.Storage dstStorage = db.get("test.dst");
+      srcStorage.readDB();
+      srcStorage.scanFolder(false,false);
+      dstStorage.readDB();
+      dstStorage.scanFolder(false,false);
+      dstStorage.updateHashvalue(false);
+      Main.rearrange(srcStorage,dstStorage,true);
+      dstStorage.cleanupFolder();
+      srcStorage.writeDB();
+      dstStorage.writeDB();
+
+      checkContents(dstStorage::dump, new String[]{
+	  ".	0",
+	  "1	0",
+	  "dcEk+ueouLiRg9TeGWYTsw	*	3	11",
+	  "EfTe6lKqT1IwiZkZWQbqlw	*	4	12",
+	  "r0ZBQ2Mlb/HCYsZUPQqZgQ	*	5	13",
+	  "x	0",
+	  "x/2	0",
+	  "NH2v5b4mmi333Z4HjBOpBg	*	6	21",
+	  "TuT+zXiKMLRVFBB3gBLbwg	*	7	22",
+	  "wFgRwqYBVwn6/lCUAgzkIg	*	8	23",
+	});
+    }
+
+    checkEvent(new Object[]{
+	"Rearrange Files test.src test.dst", new String[]{
+	  "mkdir test.dst x",
+	  "mkdir test.dst x/2",
+	  "move 21 x/2/21",
+	  "move 22 x/2/22",
+	  "move 23 x/2/23",
+	},
+	"Write DataBase test.src "+dbdir+"/test.src.db",
+      });
+  }
+
+  @Test
+  public void testMove3()
+  throws Exception
+  {
+    File root = tempdir.getRoot();
+    File dbdir = new File(root,"dic");
+    File srcdir = new File(root,"src");
+    File dstdir = new File(root,"dst");
+    Long current = System.currentTimeMillis() - 10000L;
+
+    // prepareMove()
+    createFiles(root,new Object[]{
+	"dic", new Object[]{
+	  Main.CONFIGNAME, new String[]{
+	    "test.src="+srcdir.getAbsolutePath(),
+	    "test.dst="+dstdir.getAbsolutePath(),
+	  },
+	},
+	"src", new Object[]{
+	  "1", new Object[]{
+	    "11", "1 1", current,
+	    "12", "1 22", current,
+	    "13", "1 333", current,
+	  },
+	  "21", "2222 1", current,
+	  "22", "2222 22", current,
+	  "23", "2222 333", current,
+	},
+	"dst", new Object[]{
+	},
+      });
+
+    try ( DataBase db = new DataBase(dbdir.toPath()) ) {
+      db.initializeByFile(dbdir.toPath().resolve(Main.CONFIGNAME));
+      DataBase.Storage srcStorage = db.get("test.src");
+      DataBase.Storage dstStorage = db.get("test.dst");
+      srcStorage.scanFolder(false,false);
+      dstStorage.scanFolder(false,false);
+      Main.backup(srcStorage,dstStorage,null,true);
+      srcStorage.writeDB();
+      dstStorage.writeDB();
+    }
+    initEvent();
+
+    // ----------------------------------------------------------------------
+    assertTrue(new File(dstdir,"x").mkdir());
+    assertTrue(new File(dstdir,"x/2").mkdir());
+    assertTrue(new File(dstdir,"21").renameTo(new File(dstdir,"x/2/21")));
+    assertTrue(new File(dstdir,"22").renameTo(new File(dstdir,"x/2/22")));
+    assertTrue(new File(dstdir,"23").renameTo(new File(dstdir,"x/2/23")));
+
+    try ( DataBase db = new DataBase(dbdir.toPath()) ) {
+      db.initializeByFile(dbdir.toPath().resolve(Main.CONFIGNAME));
+      DataBase.Storage srcStorage = db.get("test.src");
+      DataBase.Storage dstStorage = db.get("test.dst");
+      srcStorage.readDB();
+      srcStorage.scanFolder(false,false);
+      dstStorage.readDB();
+      dstStorage.scanFolder(false,false);
+      dstStorage.updateHashvalue(false);
+      Main.rearrange(srcStorage,dstStorage,true);
+      dstStorage.cleanupFolder();
+      srcStorage.writeDB();
+      dstStorage.writeDB();
+
+      checkContents(dstStorage::dump, new String[]{
+	  ".	0",
+	  "NH2v5b4mmi333Z4HjBOpBg	*	6	21",
+	  "TuT+zXiKMLRVFBB3gBLbwg	*	7	22",
+	  "wFgRwqYBVwn6/lCUAgzkIg	*	8	23",
+	  "1	0",
+	  "dcEk+ueouLiRg9TeGWYTsw	*	3	11",
+	  "EfTe6lKqT1IwiZkZWQbqlw	*	4	12",
+	  "r0ZBQ2Mlb/HCYsZUPQqZgQ	*	5	13",
+	});
+    }
+
+    checkEvent(new Object[]{
+	"Rearrange Files test.src test.dst", new String[]{
+	  "move x/2/21 21",
+	  "move x/2/22 22",
+	  "move x/2/23 23",
+	  "rmdir test.dst x/2",
+	  "rmdir test.dst x",
+	},
+	"Write DataBase test.src "+dbdir+"/test.src.db",
+      });
+  }
+
+  @Test
+  public void testMove4()
+  throws Exception
+  {
+    File root = tempdir.getRoot();
+    File dbdir = new File(root,"dic");
+    File srcdir = new File(root,"src");
+    File dstdir = new File(root,"dst");
+    Long current = System.currentTimeMillis() - 10000L;
+
+    // prepareMove()
+    createFiles(root,new Object[]{
+	"dic", new Object[]{
+	  Main.CONFIGNAME, new String[]{
+	    "test.src="+srcdir.getAbsolutePath(),
+	    "test.dst="+dstdir.getAbsolutePath(),
+	  },
+	},
+	"src", new Object[]{
+	  "1", new Object[]{
+	    "11", "1 1", current,
+	    "12", "1 22", current,
+	    "13", "1 333", current,
+	  },
+	  "2", new Object[]{
+	    "21", "2222 1", current,
+	    "22", "2222 22", current,
+	    "23", "2222 333", current,
+	  },
+	},
+	"dst", new Object[]{
+	},
+      });
+
+    try ( DataBase db = new DataBase(dbdir.toPath()) ) {
+      db.initializeByFile(dbdir.toPath().resolve(Main.CONFIGNAME));
+      DataBase.Storage srcStorage = db.get("test.src");
+      DataBase.Storage dstStorage = db.get("test.dst");
+      Main.backupEx(srcStorage,dstStorage);
+    }
+    initEvent();
+
+    // ----------------------------------------------------------------------
+    assertTrue(new File(srcdir,"2").renameTo(new File(srcdir,"3")));
+
+    try ( DataBase db = new DataBase(dbdir.toPath()) ) {
+      db.initializeByFile(dbdir.toPath().resolve(Main.CONFIGNAME));
+      DataBase.Storage srcStorage = db.get("test.src");
+      srcStorage.readDB();
+      srcStorage.scanFolder(false,true);
+      srcStorage.writeDB();
+    }
+
+    checkEvent(new Object[]{
+	"Scan Folder test.src "+srcdir.getAbsolutePath(), new String[]{
+	  "Reuse MD5 3/21",
+	  "Reuse MD5 3/22",
+	  "Reuse MD5 3/23",
+	},
+	"Write DataBase test.src "+dbdir+"/test.src.db",
+      });
+    initEvent();
+
+    // ----------------------------------------------------------------------
+    try ( DataBase db = new DataBase(dbdir.toPath()) ) {
+      db.initializeByFile(dbdir.toPath().resolve(Main.CONFIGNAME));
+      DataBase.Storage srcStorage = db.get("test.src");
+      DataBase.Storage dstStorage = db.get("test.dst");
+      srcStorage.readDB();
+      srcStorage.scanFolder(false,false);
+      dstStorage.readDB();
+      dstStorage.scanFolder(false,false);
+      dstStorage.updateHashvalue(false);
+      Main.rearrange(srcStorage,dstStorage,true);
+      dstStorage.cleanupFolder();
+      srcStorage.writeDB();
+      dstStorage.writeDB();
+
+      checkContents(dstStorage::dump, new String[]{
+	  ".	0",
+	  "1	0",
+	  "dcEk+ueouLiRg9TeGWYTsw	*	3	11",
+	  "EfTe6lKqT1IwiZkZWQbqlw	*	4	12",
+	  "r0ZBQ2Mlb/HCYsZUPQqZgQ	*	5	13",
+	  "3	0",
+	  "NH2v5b4mmi333Z4HjBOpBg	*	6	21",
+	  "TuT+zXiKMLRVFBB3gBLbwg	*	7	22",
+	  "wFgRwqYBVwn6/lCUAgzkIg	*	8	23",
+	});
+    }
+
+    checkEvent(new Object[]{
+	"Rearrange Files test.src test.dst", new String[]{
+	  "mkdir test.dst 3",
+	  "move 2/21 3/21",
+	  "move 2/22 3/22",
+	  "move 2/23 3/23",
+	  "rmdir test.dst 2",
+	},
+	"Write DataBase test.src "+dbdir+"/test.src.db",
+      });
+    initEvent();
   }
 
   @Test
@@ -731,7 +1143,7 @@ public class BackuperTest
 	  "copy 4/1",
 	  "mkdir hist.dst 5",
 	  "move 5/1 hist.dst 5/1-"+hist(current+3*min),
-	  "rmdir 5",
+	  "rmdir test.dst 5",
 	  "copy 5",
 	  "copy 6/1",
 	  "mkdir hist.dst 6",
@@ -931,7 +1343,7 @@ public class BackuperTest
     try ( DataBase db = new DataBase(dbdir.toPath()) ) {
       db.initializeByFile(dbdir.toPath().resolve(Main.CONFIGNAME));
       DataBase.Storage storage = db.get("test.src");
-      storage.scanFolder(true);
+      storage.scanFolder(true,false);
       checkContents(storage::dump, new String[]{
 	  ".	*",
 	  "dirx	*",
@@ -971,7 +1383,7 @@ public class BackuperTest
     try ( DataBase db = new DataBase(dbdir.toPath()) ) {
       db.initializeByFile(dbdir.toPath().resolve(Main.CONFIGNAME));
       DataBase.Storage storage = db.get("test.src");
-      storage.scanFolder(true);
+      storage.scanFolder(true,false);
       checkContents(storage::dump, new String[]{
 	  ".	*",
 	  "dirx	*",
@@ -1011,7 +1423,7 @@ public class BackuperTest
     try ( DataBase db = new DataBase(dbdir.toPath()) ) {
       db.initializeByFile(dbdir.toPath().resolve(Main.CONFIGNAME));
       DataBase.Storage storage = db.get("test.src");
-      storage.scanFolder(true);
+      storage.scanFolder(true,false);
       checkContents(storage::dump, new String[]{
 	  ".	*",
 	  "dirx	*",
@@ -1051,7 +1463,7 @@ public class BackuperTest
     try ( DataBase db = new DataBase(dbdir.toPath()) ) {
       db.initializeByFile(dbdir.toPath().resolve(Main.CONFIGNAME));
       DataBase.Storage storage = db.get("test.src");
-      storage.scanFolder(true);
+      storage.scanFolder(true,false);
       checkContents(storage::dump, new String[]{
 	  ".	*",
 	  "dirx	*",
@@ -1091,7 +1503,7 @@ public class BackuperTest
     try ( DataBase db = new DataBase(dbdir.toPath()) ) {
       db.initializeByFile(dbdir.toPath().resolve(Main.CONFIGNAME));
       DataBase.Storage storage = db.get("test.src");
-      storage.scanFolder(true);
+      storage.scanFolder(true,false);
       checkContents(storage::dump, new String[]{
 	  ".	*",
 	  "dirx	*",
@@ -1131,7 +1543,7 @@ public class BackuperTest
     try ( DataBase db = new DataBase(dbdir.toPath()) ) {
       db.initializeByFile(dbdir.toPath().resolve(Main.CONFIGNAME));
       DataBase.Storage storage = db.get("test.src");
-      storage.scanFolder(true);
+      storage.scanFolder(true,false);
       checkContents(storage::dump, new String[]{
 	  ".	*",
 	  "dirx	*",
@@ -1513,6 +1925,7 @@ public class BackuperTest
   {
     System.out.println("-- log event (start) --");
     for ( ILoggingEvent event : event.list ) {
+      if ( event.getLevel().toInt() < Level.DEBUG_INT ) continue;
       System.out.println("event : "+event);
     }
     System.out.println("-- log event (end) --");

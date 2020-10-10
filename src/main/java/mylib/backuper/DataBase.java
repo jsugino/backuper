@@ -262,6 +262,32 @@ public class DataBase extends HashMap<String,DataBase.Storage> implements Closea
       deleteFromList(folder.files,delPath);
     }
 
+    public void moveFile( Path srcPath, Path dstPath )
+    throws IOException
+    {
+      log.trace("moveFile "+this.storageName+", srcPath = "+srcPath+", dstPath = "+dstPath);
+
+      Path srcParent = srcPath.getParent();
+      if ( srcParent == null ) srcParent = Paths.get(".");
+      Folder srcFolder = this.getFolder(srcParent,this.storageName);
+      if ( srcFolder == null ) { log.error("CANNOT FIND DIR "+srcParent); return; }
+      File srcFile = findFromList(srcFolder.files,srcPath);
+
+      Path dstParent = dstPath.getParent();
+      if ( dstParent == null ) dstParent = Paths.get(".");
+      Folder dstFolder = this.getFolder(dstParent,this.storageName);
+      if ( dstFolder == null ) { log.error("CANNOT FIND DIR "+dstParent); return; }
+      File dstFile = findFromList(dstFolder.files,dstPath);
+      if ( dstFile != null ) throw new IOException("already existed "+dstFile.filePath);
+
+      deleteFromList(srcFolder.files,srcPath);
+      (dstFile = srcFile).filePath = dstPath;
+      registerToList(dstFolder.files,dstFile);
+
+      log.info("move "+srcPath+" "+dstPath);
+      this.moveRealFile(srcPath,dstPath);
+    }
+
     public void moveHistoryFile( Path filePath, Storage dstStorage )
     throws IOException
     {
@@ -316,7 +342,7 @@ public class DataBase extends HashMap<String,DataBase.Storage> implements Closea
 	Folder folder = itr.previous();
 	Path path = folder.folderPath;
 	if ( map.get(path) == 0 && !path.equals(Paths.get(".")) ) {
-	  log.info("rmdir "+path);
+	  log.info("rmdir "+this.storageName+" "+path);
 	  deleteRealFolder(path);
 	  itr.remove();
 	}
@@ -333,22 +359,29 @@ public class DataBase extends HashMap<String,DataBase.Storage> implements Closea
      * - 次のいずれかの場合、元の MD5 値は用いられない。(nullとなる)
      *   - *.db 上にファイルが無い
      *   - ファイル長が異なる
-     *   - 最終更新日時が異なる (厳密一致)
+     *   - checkLastModified でかつ、最終更新日時が異なる (厳密一致)
+     * - 次の全てがそろった場合、例外的に元の MD5 値が用いられる。
+     *   - useOldHashValue のとき
+     *   - *.db 上にはあるが、実ファイルは削除されている。(移動されたのかも)
+     *   - 次のファイルプロパティが一致。(移動されたとする)
+     *     - ファイル名(フォルダパスは無視)
+     *     - 最終更新日時
+     *     - ファイル長
      **/
-    public void scanFolder( boolean checkLastModified )
+    public void scanFolder( boolean checkLastModified, boolean useOldHashValue )
     throws IOException
     {
       log.info("Scan Folder "+storageName+' '+getRoot());
 
-      LinkedList<Folder> origFolders = folders;
-      folders = new LinkedList<Folder>();
+      LinkedList<Folder> origFolders = this.folders;
+      this.folders = new LinkedList<Folder>();
       LinkedList<Folder> folderList = new LinkedList<>();
       folderList.add(new Folder(Paths.get(".")));
       PeriodicLogger period = new PeriodicLogger();
       while ( folderList.size() > 0 ) {
 	Folder folder = folderList.remove();
 	log.trace("new Folder "+folder.folderPath);
-	registerToList(folders,folder);
+	registerToList(this.folders,folder);
 	nextPath:
 	for ( PathHolder holder : getPathHolderList(folder.folderPath) ) {
 	  Path relpath = holder.getPath();
@@ -390,9 +423,24 @@ public class DataBase extends HashMap<String,DataBase.Storage> implements Closea
 	      (!checkLastModified || file.lastModified == origfile.lastModified)
 	    ) {
 	      file.hashValue = origfile.hashValue;
+	      origfile.hashValue = null;
 	    }
+	  } else {
+	    log.error("MUST NOT OCCUR : "+holder);
 	  }
 	}
+      }
+      if ( origFolders != null && useOldHashValue ) {
+	HashMap<Datum,String> map = new HashMap<>();
+	origFolders.stream()
+	  .flatMap(f->f.files.stream())
+	  .filter(f->f.hashValue != null)
+	  .forEach(f->map.put(new Datum(f),f.hashValue));
+	this.folders.stream()
+	  .flatMap(f->f.files.stream())
+	  .filter(f->f.hashValue == null)
+	  .filter(f->(f.hashValue = map.get(new Datum(f))) != null)
+	  .forEach(f->log.debug("Reuse MD5 "+f.filePath));
       }
       period.last();
     }
@@ -496,6 +544,42 @@ public class DataBase extends HashMap<String,DataBase.Storage> implements Closea
     }
   }
 
+  public static class Datum
+  {
+    public String filename;
+    public long lastModified;
+    public long length;
+
+    public Datum( File file )
+    {
+      this(file.filePath.getFileName().toString(),file.lastModified,file.length);
+    }
+
+    public Datum( String filename, long lastModified, long length )
+    {
+      this.filename = filename;
+      this.lastModified = lastModified;
+      this.length = length;
+    }
+
+    @Override
+    public boolean equals( Object other )
+    {
+      Datum oth;
+      return
+	other instanceof Datum &&
+	(oth = (Datum)other).filename.equals(this.filename) &&
+	oth.lastModified == this.lastModified &&
+	oth.length == this.length;
+    }
+
+    @Override
+    public int hashCode()
+    {
+      return filename.hashCode() + (int)lastModified + (int)length;
+    }
+  }
+
   public static class Folder implements PathHolder
   {
     public Path folderPath;
@@ -511,6 +595,12 @@ public class DataBase extends HashMap<String,DataBase.Storage> implements Closea
     public Path getPath()
     {
       return folderPath;
+    }
+
+    @Override
+    public String toString()
+    {
+      return folderPath.toString()+'('+files.size()+','+ignores.size()+')';
     }
   }
 
@@ -550,6 +640,12 @@ public class DataBase extends HashMap<String,DataBase.Storage> implements Closea
     public void dump( PrintStream out )
     {
       out.println(hashValue+'\t'+STDFORMAT.format(new Date(lastModified))+'\t'+length+'\t'+filePath.getFileName());
+    }
+
+    @Override
+    public String toString()
+    {
+      return filePath.toString()+'('+hashValue+','+STDFORMAT.format(new Date(lastModified))+','+length+')';
     }
   }
 

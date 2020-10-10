@@ -56,6 +56,7 @@ public class MainEx
       System.err.println("    -l         : print definition");
       System.err.println("    -f         : force execute (evan 10 or more delete or override files)");
       System.err.println("    -s         : scan only");
+      System.err.println("    -r         : rearrange only");
       System.err.println("    -n         : no preparation");
       System.err.println("    -d         : simulate");
     } catch ( Exception ex ) {
@@ -82,6 +83,7 @@ public class MainEx
       String opts[] = new String[]{
 	"", "-d", "-l", "-f",
 	"-s", "-sn", "-ns",
+	"-r", "-rd", "-dr",
 	"-n", "-fn", "-nf",
 	"-nd", "-dn",
       };
@@ -150,7 +152,7 @@ public class MainEx
 	if ( arg2 != null ) throw new UsageException("Unused arguments "+arg2);
 	log.info("Start Refresh "+storage.storageName);
 	storage.readDB();
-	storage.scanFolder(false);
+	storage.scanFolder(false,false);
 	storage.updateHashvalue(!doPrepare);
 	storage.writeDB();
 	log.info("End Refresh "+storage.storageName);
@@ -158,6 +160,24 @@ public class MainEx
 	throw new UsageException("Unknown ID "+arg1);
       }
 
+    } else if ( option.equals("-r") ) {
+      if ( arg1 == null ) {
+	throw new UsageException("no argument for -r");
+      } else if ( arg2 == null ) {
+	Storage storage = database.get(arg1);
+	if ( storage == null ) throw new UsageException("unknown storage for -r "+arg1);
+	log.info("Start Rearrange "+storage.storageName);
+	rearrange(storage);
+	log.info("End Rearrange "+storage.storageName);
+      } else if ( arg3 == null ) {
+	throw new UsageException("less argument for -r "+arg1+" "+arg2);
+      } else {
+	Storage srcStorage = database.get(arg1+'.'+arg2);
+	Storage dstStorage = database.get(arg1+'.'+arg3);
+	log.info("Start Rearrange "+srcStorage.storageName+" "+dstStorage.storageName);
+	rearrange(srcStorage,dstStorage);
+	log.info("End Rearrange "+srcStorage.storageName+" "+dstStorage.storageName);
+      }
     } else {
       throw new UsageException("undefined option "+option);
     }
@@ -201,7 +221,7 @@ public class MainEx
     if ( storage == null ) return;
     storage.readDB();
     if ( doPrepare ) {
-      storage.scanFolder(true);
+      storage.scanFolder(true,false);
     } else {
       storage.complementFolders();
     }
@@ -213,6 +233,35 @@ public class MainEx
     if ( storage == null ) return;
     if ( doPrepare || doExecute ) {
       storage.writeDB();
+    }
+  }
+
+  // ----------------------------------------------------------------------
+  public void rearrange( Storage storage )
+  throws IOException
+  {
+    storage.readDB();
+    storage.scanFolder(false,true);
+    if ( doExecute ) {
+      storage.writeDB();
+    }
+  }
+
+  public void rearrange( Storage srcStorage, Storage dstStorage )
+  throws IOException
+  {
+    srcStorage.readDB();
+    srcStorage.scanFolder(true,true);
+    dstStorage.readDB();
+    dstStorage.scanFolder(true,true);
+    if ( doExecute ) {
+      dstStorage.updateHashvalue(false);
+      Main.rearrange(srcStorage,dstStorage,true);
+      dstStorage.cleanupFolder();
+      srcStorage.writeDB();
+      dstStorage.writeDB();
+    } else {
+      Main.rearrange(srcStorage,dstStorage,false);
     }
   }
 }

@@ -237,14 +237,14 @@ public class Main
     if ( exCommand == Command.BACKUP_SKIPSCAN ) {
       srcStorage.complementFolders();
     } else {
-      srcStorage.scanFolder(true);
+      srcStorage.scanFolder(true,false);
     }
 
     dstStorage.readDB();
     if ( exCommand == Command.BACKUP_SKIPSCAN ) {
       dstStorage.complementFolders();
     } else {
-      dstStorage.scanFolder(true);
+      dstStorage.scanFolder(true,false);
     }
 
     if ( hisStorage != null ) {
@@ -252,7 +252,7 @@ public class Main
       if ( exCommand == Command.BACKUP_SKIPSCAN ) {
 	hisStorage.complementFolders();
       } else {
-	hisStorage.scanFolder(true);
+	hisStorage.scanFolder(true,false);
       }
     }
 
@@ -414,7 +414,7 @@ public class Main
   {
     log.info("Start Refresh "+storage.storageName);
     storage.readDB();
-    storage.scanFolder(true);
+    storage.scanFolder(true,false);
     storage.updateHashvalue(false);
     storage.writeDB();
     log.info("End Refresh "+storage.storageName);
@@ -473,21 +473,27 @@ public class Main
     return list;
   }
 
-  public static void rearrange( Storage srcStorage, Storage dstStorage, boolean doMove )
+  public static void rearrange( Storage srcStorage, Storage dstStorage, boolean doExecute )
+  throws IOException
   {
-    log.debug("Compare Files "+srcStorage.storageName+" "+dstStorage.storageName);
+    log.debug("Rearrange Files "+srcStorage.storageName+" "+dstStorage.storageName);
     long unit = Math.max(srcStorage.timeUnit(),dstStorage.timeUnit());
     LinkedList<File> frlist = toFileList(srcStorage); // ソートされたListに変換
     LinkedList<File> tolist = toFileList(dstStorage); // ソートされたListに変換
     LinkedList<Path> difflist = compare(frlist,tolist,unit); // frlist, tolist にはそれ以外が残る。
 
     HashMap<String,File> frmap = new HashMap<>();
-    frlist.stream().forEach(f->{if (f.hashValue != null) frmap.put(f.hashValue,f);});
+    for ( File file : frlist ) {
+      if ( file.hashValue == null ) continue;
+      log.trace("rearrange use MD5 : "+file.filePath+" "+file.hashValue);
+      frmap.put(file.hashValue,file);
+    }
     for ( File file : tolist ) {
       if ( file.hashValue == null ) continue;
+      log.trace("rearrange find MD5 : "+file.filePath+" "+file.hashValue);
       File orig = frmap.get(file.hashValue);
       if ( orig == null ) continue;
-      log.info("move from "+file.filePath+" to "+orig.filePath);
+      if ( doExecute ) dstStorage.moveFile(file.filePath,orig.filePath);
     }
   }
 

@@ -10,6 +10,7 @@ java -jar jarfiile.jar DicFolder [option] [level] [src [dst]]
 option	-l : ストレージやタスクを確認する。
 	-f : 強制実行する。(削除や上書きするファイルが10個以上でも実行する)
 	-s : スキャンのみを行う
+	-r : ファイル移動を反映する
 	-n : 準備処理を行わない。(-sn = フルスキャン、-dn = DBを読まない)
 	-d : シミュレートする。(実際のコピーは行わない。)
 
@@ -53,6 +54,12 @@ Common C D
 -l daily [src [dst]]
 	レベル daily のタスクとストレージを表示
 	(src, dst が指定されていたら、そのドライブなどに限定)
+
+ファイル移動：
+-r Common.C
+	ストレージ Common.C 内でのファイル移動を *.db に反映する。
+-r Common C D
+	ストレージ Common.C と同等の配置となるように、Common.D 内で移動。
 
 スキャン：
 -s|-sn daily [src [dst]]
@@ -105,7 +112,7 @@ DstName   : コピー先「識別名」を指定する。
 読み書きするフォルダの最小単位は Storage になる。
 Storage の名前は <storage> で定義したストレージの前に、<folder> で定義したフォルダ名を連結したもの。
 
-[<fonder name="..."> の解釈ルール]
+[<folder name="..."> の解釈ルール]
 name の指定がない場合:
   ・親<folder>がない場合 dir を用いる。
   ・親<folder>がある場合は親の name に '.' で dir を連結する。
@@ -174,6 +181,29 @@ linux.dst2=/mnt/D/Linux/home/junsei
 [エラー対応方法]
 "CANNOT COPY" と表示されるのは、コピー先に無視する対象のファイルがあり、上書きコピーできないためである。
 内容を確認し、不必要なら手で削除をして、再度バックアップ処理をすること。
+
+[*.db のフォーマット]
+<fildername>	<ignorenum>
+<MD5string>	<datetime>	<length>	<filename>
+...
+
+<foldername>	フォルダー名
+<ignorenum>	無視したファイル・フォルダーの数
+<MD5string>	MD5の計算値 (後端の '=' は取り除いてある)
+<datetime>	年月日時分秒ミリ秒
+<length>	ファイル長
+<filename>	ファイル名
+
+(例)
+.	2
+dir1	0
+dcEk+ueouLiRg9TeGWYTsw	2020/10/10 10:09:49.480	3	file1-1
+EfTe6lKqT1IwiZkZWQbqlw	2020/10/10 10:09:49.480	4	file1-2
+r0ZBQ2Mlb/HCYsZUPQqZgQ	2020/10/10 10:09:49.480	5	file1-3
+dir2	0
+NH2v5b4mmi333Z4HjBOpBg	2020/10/10 10:09:49.480	6	file2-1
+TuT+zXiKMLRVFBB3gBLbwg	2020/10/10 10:09:49.480	7	file2-2
+wFgRwqYBVwn6/lCUAgzkIg	2020/10/10 10:09:49.480	8	file2-3
 
 ======================================================================
 クラス定義
