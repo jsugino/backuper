@@ -237,6 +237,8 @@ public class MainEx
     } else {
       Main.simulate(srcStorage,dstStorage,null);
     }
+    finalizeDB(srcStorage);
+    finalizeDB(dstStorage);
   }
 
   /**
