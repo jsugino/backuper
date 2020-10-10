@@ -83,7 +83,7 @@ public class MainEx
       String opts[] = new String[]{
 	"", "-d", "-l", "-f",
 	"-s", "-sn", "-ns",
-	"-r", "-rd", "-dr",
+	"-r", "-rd", "-dr", "-rn", "-nr", "-dnr", "-ndr", "-nrd", "-drn", "-rdn", "-rnd",
 	"-n", "-fn", "-nf",
 	"-nd", "-dn",
       };
@@ -132,54 +132,69 @@ public class MainEx
   {
 
     if ( option.equals("") ) {
-      if ( arg1 == null ) throw new UsageException("no argument");
+      if ( arg1 == null ) throw new UsageException("No Argument");
       List<Task> tasks = bkTasks.get(arg1);
       if ( tasks != null ) {
-	log.info("Backup with level : "+arg1);
+	if ( arg2 != null ) throw new UsageException("Unused Arguments "+arg2);
+	log.info("Start Backup with level "+arg1);
 	backup(tasks);
-      } else {
-	throw new UsageException("Unknown ID "+arg1);
+	log.info("End Backup with level "+arg1);
+	return;
       }
+      if ( arg2 == null ) throw new UsageException("Less Argument "+arg1);
+      if ( arg3 == null ) throw new UsageException("Less Argument "+arg1+" "+arg2);
+
+      Storage srcStorage = database.get(arg1+'.'+arg2);
+      if ( srcStorage == null ) throw new UsageException("Unknown Storage Name "+arg1+'.'+arg2);
+      Storage dstStorage = database.get(arg1+'.'+arg3);
+      if ( dstStorage == null ) throw new UsageException("Unknown Storage Name "+arg1+'.'+arg3);
+
+      log.info("Start Backup "+srcStorage.storageName+" "+dstStorage.storageName);
+      backup(srcStorage,dstStorage);
+      log.info("End Backup "+srcStorage.storageName+" "+dstStorage.storageName);
 
     } else if ( option.equals("-l") ) {
       database.printDataBase(System.out);
       bkTasks.printTask(System.out);
 
     } else if ( option.equals("-s" ) ) {
-      if ( arg1 == null ) throw new UsageException("no argument for -s");
+      if ( arg1 == null ) throw new UsageException("No Argument for -s");
       Storage storage = database.get(arg1);
       if ( storage != null ) {
-	if ( arg2 != null ) throw new UsageException("Unused arguments "+arg2);
+	if ( arg2 != null ) throw new UsageException("Unused Arguments for -s "+arg2);
 	log.info("Start Refresh "+storage.storageName);
 	storage.readDB();
 	storage.scanFolder(false,false);
 	storage.updateHashvalue(!doPrepare);
 	storage.writeDB();
 	log.info("End Refresh "+storage.storageName);
-      } else {
-	throw new UsageException("Unknown ID "+arg1);
+	return;
       }
+      throw new UsageException("Unknown ID for -s "+arg1);
 
     } else if ( option.equals("-r") ) {
-      if ( arg1 == null ) {
-	throw new UsageException("no argument for -r");
-      } else if ( arg2 == null ) {
-	Storage storage = database.get(arg1);
-	if ( storage == null ) throw new UsageException("unknown storage for -r "+arg1);
+      if ( arg1 == null ) throw new UsageException("No Argument for -r");
+      Storage storage = database.get(arg1);
+      if ( storage != null ) {
+	if ( arg2 != null ) throw new UsageException("Unused Arguments for -r "+arg2);
 	log.info("Start Rearrange "+storage.storageName);
 	rearrange(storage);
 	log.info("End Rearrange "+storage.storageName);
-      } else if ( arg3 == null ) {
-	throw new UsageException("less argument for -r "+arg1+" "+arg2);
-      } else {
-	Storage srcStorage = database.get(arg1+'.'+arg2);
-	Storage dstStorage = database.get(arg1+'.'+arg3);
-	log.info("Start Rearrange "+srcStorage.storageName+" "+dstStorage.storageName);
-	rearrange(srcStorage,dstStorage);
-	log.info("End Rearrange "+srcStorage.storageName+" "+dstStorage.storageName);
+	return;
       }
+      if ( arg2 == null ) throw new UsageException("Less Argument for -r "+arg1);
+      if ( arg3 == null ) throw new UsageException("Less Argument for -r "+arg1+" "+arg2);
+
+      Storage srcStorage = database.get(arg1+'.'+arg2);
+      if ( srcStorage == null ) throw new UsageException("Unknown Storage Name for -r "+arg1+'.'+arg2);
+      Storage dstStorage = database.get(arg1+'.'+arg3);
+      if ( dstStorage == null ) throw new UsageException("Unknown Storage Name for -r "+arg1+'.'+arg3);
+
+      log.info("Start Rearrange "+srcStorage.storageName+" "+dstStorage.storageName);
+      rearrange(srcStorage,dstStorage);
+      log.info("End Rearrange "+srcStorage.storageName+" "+dstStorage.storageName);
     } else {
-      throw new UsageException("undefined option "+option);
+      throw new UsageException("Undefined Option "+option);
     }
   }
 
@@ -212,6 +227,18 @@ public class MainEx
     }
   }
 
+  public void backup( Storage srcStorage, Storage dstStorage )
+  throws IOException
+  {
+    prepareDB(srcStorage);
+    prepareDB(dstStorage);
+    if ( doExecute ) {
+      Main.backup(srcStorage,dstStorage,null,forceCopy);
+    } else {
+      Main.simulate(srcStorage,dstStorage,null);
+    }
+  }
+
   /**
    * readDB() した後に doPrepare により scanFolder() か complementFolders() を呼び出す。
    **/
@@ -241,7 +268,11 @@ public class MainEx
   throws IOException
   {
     storage.readDB();
-    storage.scanFolder(false,true);
+    if ( doPrepare ) {
+      storage.scanFolder(false,true);
+    } else {
+      storage.complementFolders();
+    }
     if ( doExecute ) {
       storage.writeDB();
     }
@@ -251,9 +282,14 @@ public class MainEx
   throws IOException
   {
     srcStorage.readDB();
-    srcStorage.scanFolder(true,true);
     dstStorage.readDB();
-    dstStorage.scanFolder(true,true);
+    if ( doPrepare ) {
+      srcStorage.scanFolder(true,true);
+      dstStorage.scanFolder(true,true);
+    } else {
+      srcStorage.complementFolders();
+      dstStorage.complementFolders();
+    }
     if ( doExecute ) {
       dstStorage.updateHashvalue(false);
       Main.rearrange(srcStorage,dstStorage,true);

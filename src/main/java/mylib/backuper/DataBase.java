@@ -184,7 +184,7 @@ public class DataBase extends HashMap<String,DataBase.Storage> implements Closea
 	int i1;
 	if ( (i1 = line.indexOf('\t')) < 0 ) {
 	  folder = new Folder(Paths.get(line));
-	  log.trace("new folder "+folder.folderPath);
+	  log.trace("readDB new folder "+folder.folderPath);
 	  this.folders.add(folder);
 	} else {
 	  int i2 = line.indexOf('\t',i1+1);
@@ -193,9 +193,9 @@ public class DataBase extends HashMap<String,DataBase.Storage> implements Closea
 	    folder.folderPath.equals(curPath)
 	    ? Paths.get(line.substring(i3+1))
 	    : folder.folderPath.resolve(line.substring(i3+1)));
-	  log.trace("new file "+file.filePath);
+	  log.trace("readDB new file "+file.filePath);
 	  folder.files.add(file);
-	  log.trace("read "+file.filePath);
+	  log.trace("readDB read "+file.filePath);
 	  file.hashValue = line.substring(0,i1);
 	  try {
 	    file.lastModified = STDFORMAT.parse(line.substring(i1+1,i2)).getTime();
@@ -380,14 +380,14 @@ public class DataBase extends HashMap<String,DataBase.Storage> implements Closea
       PeriodicLogger period = new PeriodicLogger();
       while ( folderList.size() > 0 ) {
 	Folder folder = folderList.remove();
-	log.trace("new Folder "+folder.folderPath);
+	log.trace("scanFolder new folder "+folder.folderPath);
 	registerToList(this.folders,folder);
 	nextPath:
 	for ( PathHolder holder : getPathHolderList(folder.folderPath) ) {
 	  Path relpath = holder.getPath();
 	  period.logging(relpath);
 	  if ( holder instanceof Folder ) {
-	    log.trace("scan folder "+relpath);
+	    log.trace("scanFolder scan folder "+relpath);
 	    for ( Pattern pat : ignoreFolderPats ) {
 	      if ( pat.matcher(relpath.toString()).matches() ) {
 		log.debug("Ignore folder "+relpath);
@@ -403,7 +403,7 @@ public class DataBase extends HashMap<String,DataBase.Storage> implements Closea
 	      folder.ignores.add(holder.getPath());
 	      continue nextPath;
 	    }
-	    log.trace("scan file "+relpath);
+	    log.trace("scanFolder scan file "+relpath);
 	    for ( Pattern pat : ignoreFilePats ) {
 	      if ( pat.matcher(relpath.getFileName().toString()).matches() ) {
 		log.debug("Ignore file "+relpath);
@@ -411,7 +411,7 @@ public class DataBase extends HashMap<String,DataBase.Storage> implements Closea
 		continue nextPath;
 	      }
 	    }
-	    log.trace("new File "+relpath);
+	    log.trace("scanFolder new file "+relpath);
 	    registerToList(folder.files,file);
 	    Folder origfolder = null;
 	    File origfile = null;

@@ -493,7 +493,11 @@ public class Main
       log.trace("rearrange find MD5 : "+file.filePath+" "+file.hashValue);
       File orig = frmap.get(file.hashValue);
       if ( orig == null ) continue;
-      if ( doExecute ) dstStorage.moveFile(file.filePath,orig.filePath);
+      if ( doExecute ) {
+	dstStorage.moveFile(file.filePath,orig.filePath);
+      } else {
+	log.info("move "+file.filePath+' '+orig.filePath);
+      }
     }
   }
 
