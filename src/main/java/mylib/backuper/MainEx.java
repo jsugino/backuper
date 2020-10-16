@@ -154,8 +154,9 @@ public class MainEx
       log.info("End Backup "+srcStorage.storageName+" "+dstStorage.storageName);
 
     } else if ( option.equals("-l") ) {
+      if ( arg1 != null ) throw new UsageException("Unused Arguments for -l "+arg1);
       database.printDataBase(System.out);
-      bkTasks.printTask(System.out);
+      //bkTasks.printTask(System.out);
 
     } else if ( option.equals("-s" ) ) {
       if ( arg1 == null ) throw new UsageException("No Argument for -s");

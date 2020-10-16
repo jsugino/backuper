@@ -819,6 +819,46 @@ public class DataBase extends HashMap<String,DataBase.Storage> implements Closea
 
   public void printDataBase( PrintStream out )
   {
+    String array[][] = this.toArray();
+    int maxcol = Arrays.stream(array).mapToInt(l->l.length).max().orElse(-1);
+    if ( maxcol == -1 ) {
+      log.warn("NO DATA in DB");
+      return;
+    }
+
+    for ( int i = 0; i < array.length; ++i ) {
+      String line[] = array[i];
+      if ( line.length < maxcol ) array[i] = line = Arrays.copyOf(line,maxcol);
+      for ( int j = 0; j < line.length; ++j ) {
+	if ( line[j] == null ) line[j] = "";
+	else if ( line[j].length() == 0 ) line[j] = "/.";
+      }
+    }
+
+    for ( int j = 0; j < maxcol; ++j ) {
+      int maxlen = 0;
+      for ( int i = 0; i < array.length; ++i ) {
+	maxlen = Math.max(maxlen,array[i][j].length());
+      }
+      for ( int i = 0; i < array.length; ++i ) {
+	char col[] = Arrays.copyOf(array[i][j].toCharArray(),maxlen);
+	for ( int k = array[i][j].length(); k < maxlen; ++k ) col[k] = ' ';
+	array[i][j] = new String(col);
+      }
+    }
+
+    for ( int i = 0; i < array.length; ++i ) {
+      String line[] = array[i];
+      for ( int j = 0; j < line.length; ++j ) {
+	if ( j > 0 ) out.print(' ');
+	out.print(line[j]);
+      }
+      out.println();
+    }
+  }
+
+  public void printDataBaseAsCsv( PrintStream out )
+  {
     String arr[][] = this.toArray();
     for ( int i = 0; i < arr.length; ++i ) {
       String line[] = arr[i];
