@@ -549,7 +549,7 @@ public class DataBaseTest
       String exp[] = new String[exp1.length];
       for ( int i = 0; i < exp.length; ++i ) exp[i] = exp1[i] + exp2[i];
       //MainEx.printConfig(System.out,db,bk);
-      checkContents(out->MainEx.printConfig(out,db,bk),exp);
+      checkContents(out->Main.printConfig(out,db,bk),exp);
       db.printDataBaseAsCsv(System.out);
     }
     System.out.println("END!!");

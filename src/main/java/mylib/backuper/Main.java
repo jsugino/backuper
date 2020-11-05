@@ -27,17 +27,6 @@ public class Main
 {
   public final static Logger log = LoggerFactory.getLogger(Main.class);
 
-  // execute commands
-  static enum Command {
-    BACKUP_BY_TASK,
-    BACKUP_OR_SCANONLY,
-    BACKUP_SKIPSCAN,
-    SIMULATE,
-    LISTDB
-  }
-
-  public static Command exCommand = Command.BACKUP_OR_SCANONLY;
-
   @SuppressWarnings("serial")
   public static class UsageException extends RuntimeException
   {
@@ -52,223 +41,360 @@ public class Main
 
   public static void main( String argv[] )
   {
-    LinkedList<String> args = new LinkedList<>();
-    args.addAll(Arrays.asList(argv));
+    if ( argv.length > 0 && argv[0].equals("--old") ) {
+      String newa[] = new String[argv.length-1];
+      for ( int i = 1; i < argv.length; ++i ) newa[i-1] = argv[i];
+      Main.main(newa);
+      return;
+    }
+
     try {
-      main(args);
+      Main command = new Main();
+      command.parseOption(argv,1);
+
+      Path dbFolder = Paths.get(argv[0]);
+      try ( DataBase database = new DataBase(dbFolder) ) {
+	if ( !Files.isReadable(dbFolder.resolve(CONFIGXML)) )
+	  throw new UsageException("No definition file "+CONFIGXML);
+	Backup bkTasks = database.initializeByXml(dbFolder.resolve(CONFIGXML));
+	command.execute(database,bkTasks);
+      }
     } catch ( UsageException ex ) {
       log.error(ex.getMessage(),ex);
-      System.err.println("usage : java -jar file.jar [-sdl] dic.folder src.name [dst.name]");
-      System.err.println("    dic.folder : database folder");
-      System.err.println("    src.name   : source id");
-      System.err.println("    dst.name   : destination id");
+      System.err.println("usage : java -jar jarfiile.jar DicFolder [option] [level] [src [dst]]");
+      System.err.println("    DicFolder : database folder");
+      System.err.println("    level     : task level (ex. daily)");
+      System.err.println("    src       : source id (ex. C, common.C, etc.)");
+      System.err.println("    dst       : destination id (ex. D, common.D, etc.)");
       System.err.println("  Option");
-      System.err.println("    -s         : skip scan DB");
-      System.err.println("    -d         : debug mode (no scan, no copy, no delete)");
-      System.err.println("    -l         : print all definition");
+      System.err.println("    -l         : print definition");
+      System.err.println("    -f         : force execute (evan 10 or more delete or override files)");
+      System.err.println("    -s         : scan only");
+      System.err.println("    -r         : rearrange only");
+      System.err.println("    -n         : no preparation");
+      System.err.println("    -d         : simulate");
     } catch ( Exception ex ) {
       log.error(ex.getMessage(),ex);
     }
   }
 
-  public static void main( List<String> args )
+  // ----------------------------------------------------------------------
+  public String option = "";
+  public boolean forceCopy = false;
+  public boolean doPrepare = true;
+  public boolean doExecute = true;
+  public String arg1 = null;
+  public String arg2 = null;
+  public String arg3 = null;
+
+  public void parseOption( String argv[], int argcnt )
+  {
+    if ( argv.length < argcnt+1 ) throw new UsageException("Less arguments");
+
+    if ( argv[argcnt].length() > 0 && argv[argcnt].charAt(0) == '-' ) {
+      option = argv[argcnt++];
+
+      String opts[] = new String[]{
+	"", "-d", "-l", "-f",
+	"-s", "-sn", "-ns",
+	"-r", "-rd", "-dr", "-rn", "-nr", "-dnr", "-ndr", "-nrd", "-drn", "-rdn", "-rnd",
+	"-n", "-fn", "-nf",
+	"-nd", "-dn",
+      };
+      for ( int i = 0; i < opts.length; ++i ) {
+	if ( option.equals(opts[i]) ) {
+	  opts = null;
+	  break;
+	}
+      }
+      if ( opts != null )
+	throw new UsageException("Unknown option : "+option);
+
+      int idx = 1;
+      while ( idx < option.length() ) {
+	boolean find = false;
+	switch ( option.charAt(idx) ) {
+	case 'f':
+	  forceCopy = true;
+	  find = true;
+	  break;
+	case 'n':
+	  doPrepare = false;
+	  find = true;
+	  break;
+	case 'd':
+	  doExecute = false;
+	  find = true;
+	  break;
+	}
+	if ( find ) {
+	  option = option.substring(0,idx)+option.substring(idx+1);
+	} else {
+	  ++idx;
+	}
+      }
+      if ( option.equals("-") ) option = "";
+    }
+    if ( argcnt < argv.length ) arg1 = argv[argcnt++];
+    if ( argcnt < argv.length ) arg2 = argv[argcnt++];
+    if ( argcnt < argv.length ) arg3 = argv[argcnt++];
+    if ( argcnt < argv.length ) throw new UsageException("Unused argument "+argv[argcnt]);
+  }
+
+  public void execute( DataBase database, Backup bkTasks )
   throws IOException
   {
-    String arg = getArg(args);
 
-    Path dbFolder = Paths.get(arg);
-
-    try ( DataBase db = new DataBase(dbFolder) ) {
-      Backup backup = null;
-      if ( Files.isReadable(dbFolder.resolve(CONFIGXML)) ) {
-	backup = db.initializeByXml(dbFolder.resolve(CONFIGXML));
-	if ( exCommand == Command.BACKUP_OR_SCANONLY ) {
-	  exCommand = Command.BACKUP_BY_TASK;
-	}
-      } else if ( Files.isReadable(dbFolder.resolve(CONFIGNAME)) ) {
-	db.initializeByFile(dbFolder.resolve(CONFIGNAME));
-      } else {
-	throw new UsageException("no definition file");
+    if ( option.equals("") ) {
+      if ( arg1 == null ) throw new UsageException("No Argument");
+      List<Task> tasks = bkTasks.get(arg1);
+      if ( tasks != null ) {
+	if ( arg2 != null ) throw new UsageException("Unused Arguments "+arg2);
+	log.info("Start Backup with level "+arg1);
+	backup(tasks);
+	log.info("End Backup with level "+arg1);
+	return;
       }
-      switch ( exCommand ) {
-      case BACKUP_BY_TASK:
-	{
-	  for ( Task task : getTaskList(backup,args) ) {
-	    for ( Storage copy : task.copyStorages ) {
-	      Storage his = task.historyStorages.get(copy.storageName);
-	      backupEx(task.origStorage,copy,his);
-	    }
-	  }
-	}
-	break;
+      if ( arg2 == null ) throw new UsageException("Less Argument "+arg1);
+      if ( arg3 == null ) throw new UsageException("Less Argument "+arg1+" "+arg2);
 
-      case BACKUP_OR_SCANONLY:
-	{
-	  Storage srcStorage = getStorage(db,args);
-	  Storage dstStorage = getStorage(db,args,false);
-	  if ( dstStorage == null ) {
-	    refresh(srcStorage);
-	  } else {
-	    backupEx(srcStorage,dstStorage);
-	  }
-	}
-	break;
+      Storage srcStorage = database.get(arg1+'.'+arg2);
+      if ( srcStorage == null ) throw new UsageException("Unknown Storage Name "+arg1+'.'+arg2);
+      Storage dstStorage = database.get(arg1+'.'+arg3);
+      if ( dstStorage == null ) throw new UsageException("Unknown Storage Name "+arg1+'.'+arg3);
 
-      case BACKUP_SKIPSCAN:
-	{
-	  Storage srcStorage = getStorage(db,args);
-	  Storage dstStorage = getStorage(db,args);
-	  backupEx(srcStorage,dstStorage);
-	}
-	break;
+      log.info("Start Backup "+srcStorage.storageName+" "+dstStorage.storageName);
+      backup(srcStorage,dstStorage);
+      log.info("End Backup "+srcStorage.storageName+" "+dstStorage.storageName);
 
-      case SIMULATE:
-	{
-	  Storage srcStorage = getStorage(db,args);
-	  Storage dstStorage = getStorage(db,args);
-	  simulateEx(srcStorage,dstStorage);
-	}
-	break;
+    } else if ( option.equals("-l") ) {
+      if ( arg1 != null ) throw new UsageException("Unused Arguments for -l "+arg1);
+      printConfig(System.out,database,bkTasks);
 
-      case LISTDB:
-	{
-	  for ( Storage storage : listDB(db) ) {
-	    if ( !Files.isReadable(db.dbFolder.resolve(storage.storageName+".db")) ) {
-	      System.out.format("%-20s (no *.db file) %s",
-		storage.storageName,
-		storage.getRoot()).println();
-	    } else {
-	      storage.readDB();
-	      System.out.format("%-20s %6d %7d %s",
-		storage.storageName,
-		storage.folderSize(),
-		storage.fileSize(),
-		storage.getRoot()).println();
-	    }
-	  }
-	  //backup.printTask(System.out);
-	}
-	break;
+    } else if ( option.equals("-s" ) ) {
+      if ( arg1 == null ) throw new UsageException("No Argument for -s");
+      Storage storage = database.get(arg1);
+      if ( storage != null ) {
+	if ( arg2 != null ) throw new UsageException("Unused Arguments for -s "+arg2);
+	log.info("Start Refresh "+storage.storageName);
+	storage.readDB();
+	storage.scanFolder(false,false);
+	storage.updateHashvalue(!doPrepare);
+	storage.writeDB();
+	log.info("End Refresh "+storage.storageName);
+	return;
       }
+      throw new UsageException("Unknown ID for -s "+arg1);
+
+    } else if ( option.equals("-r") ) {
+      if ( arg1 == null ) throw new UsageException("No Argument for -r");
+      Storage storage = database.get(arg1);
+      if ( storage != null ) {
+	if ( arg2 != null ) throw new UsageException("Unused Arguments for -r "+arg2);
+	log.info("Start Rearrange "+storage.storageName);
+	rearrange(storage);
+	log.info("End Rearrange "+storage.storageName);
+	return;
+      }
+      if ( arg2 == null ) throw new UsageException("Less Argument for -r "+arg1);
+      if ( arg3 == null ) throw new UsageException("Less Argument for -r "+arg1+" "+arg2);
+
+      Storage srcStorage = database.get(arg1+'.'+arg2);
+      if ( srcStorage == null ) throw new UsageException("Unknown Storage Name for -r "+arg1+'.'+arg2);
+      Storage dstStorage = database.get(arg1+'.'+arg3);
+      if ( dstStorage == null ) throw new UsageException("Unknown Storage Name for -r "+arg1+'.'+arg3);
+
+      log.info("Start Rearrange "+srcStorage.storageName+" "+dstStorage.storageName);
+      rearrange(srcStorage,dstStorage);
+      log.info("End Rearrange "+srcStorage.storageName+" "+dstStorage.storageName);
+    } else {
+      throw new UsageException("Undefined Option "+option);
     }
   }
 
-  public static String getArg( List<String> args )
-  {
-    return getArg(args,true);
-  }
-
-  public static String getArg( List<String> args, boolean throwflag )
-  {
-    while ( args.size() > 0 ) {
-      String arg = args.remove(0);
-      if ( !checkOpt(arg) ) {
-	if ( args.size() > 0 ) checkOpt(args.get(0));
-	return arg;
-      }
-    }
-    if ( throwflag ) throw new UsageException("Not enough arguments");
-    return null;
-  }
-
-  public static boolean checkOpt( String arg )
-  {
-    if ( !arg.startsWith("-") ) return false;
-    for ( int i = 1; i < arg.length(); ++i ) {
-      switch ( arg.charAt(i) ) {
-      case 'd':
-	exCommand = Command.SIMULATE;
-	break;
-      case 's':
-	exCommand = Command.BACKUP_SKIPSCAN;
-	break;
-      case 'l':
-	exCommand = Command.LISTDB;
-	break;
-      default:
-	throw new UsageException("Illegal Option : "+arg);
-      }
-    }
-    return true;
-  }
-
-  public static Storage getStorage( DataBase db, List<String> args )
-  {
-    return getStorage(db,args,true);
-  }
-
-  public static Storage getStorage( DataBase db, List<String> args, boolean throwflag )
-  {
-    String arg = getArg(args,throwflag);
-    if ( arg == null ) return null;
-    Storage storage = db.get(arg);
-    if ( throwflag && storage == null ) throw new UsageException("Illegal Storage Name : "+arg);
-    return storage;
-  }
-
-  public static List<Task> getTaskList( Backup backup, List<String> args )
-  {
-    String arg = getArg(args,false);
-    if ( arg == null ) {
-      StringBuffer buf = new StringBuffer();
-      String str = "Need to specify Task Name : ";
-      for ( String key : backup.keySet() ) {
-	buf.append(str).append(key);
-	str = ", ";
-      }
-      throw new UsageException(buf.toString());
-    }
-    List<Task> tasklist = backup.get(arg);
-    if ( tasklist == null ) throw new UsageException("No such task : "+arg);
-    return tasklist;
-  }
-
-  public static void backupEx( Storage srcStorage, Storage dstStorage )
+  // ----------------------------------------------------------------------
+  /**
+   * レベルに対するバックアップ処理を行う。
+   *
+   * @param doPrepare true のとき、スキャンする
+   * @param doExecute true のとき、コピーを実行する
+   */
+  public void backup( List<Task> tasks )
   throws IOException
   {
-    backupEx(srcStorage,dstStorage,null);
+    for ( Task task : tasks ) {
+      Storage orig = task.origStorage;
+      prepareDB(orig);
+      for ( Storage copy : task.copyStorages ) {
+	Storage his = task.historyStorages.get(copy.storageName);
+	prepareDB(his);
+	prepareDB(copy);
+	if ( doExecute ) {
+	  Main.backupEx(orig,copy,his,forceCopy);
+	} else {
+	  Main.simulate(orig,copy,his);
+	}
+	finalizeDB(copy);
+	finalizeDB(his);
+      }
+      finalizeDB(orig);
+    }
   }
 
-  public static void backupEx( Storage srcStorage, Storage dstStorage, Storage hisStorage )
+  public void backup( Storage srcStorage, Storage dstStorage )
   throws IOException
   {
-    log.info("Start Backup "+srcStorage.storageName+" "+dstStorage.storageName);
+    prepareDB(srcStorage);
+    prepareDB(dstStorage);
+    if ( doExecute ) {
+      Main.backupEx(srcStorage,dstStorage,null,forceCopy);
+    } else {
+      Main.simulate(srcStorage,dstStorage,null);
+    }
+    finalizeDB(srcStorage);
+    finalizeDB(dstStorage);
+  }
+
+  /**
+   * readDB() した後に doPrepare により scanFolder() か complementFolders() を呼び出す。
+   **/
+  public void prepareDB( Storage storage )
+  throws IOException
+  {
+    if ( storage == null ) return;
+    storage.readDB();
+    if ( doPrepare ) {
+      storage.scanFolder(true,false);
+    } else {
+      storage.complementFolders();
+    }
+  }
+
+  public void finalizeDB( Storage storage )
+  throws IOException
+  {
+    if ( storage == null ) return;
+    if ( doPrepare || doExecute ) {
+      storage.writeDB();
+    }
+  }
+
+  // ----------------------------------------------------------------------
+  public void rearrange( Storage storage )
+  throws IOException
+  {
+    storage.readDB();
+    if ( doPrepare ) {
+      storage.scanFolder(false,true);
+    } else {
+      storage.complementFolders();
+    }
+    if ( doExecute ) {
+      storage.writeDB();
+    }
+  }
+
+  public void rearrange( Storage srcStorage, Storage dstStorage )
+  throws IOException
+  {
     srcStorage.readDB();
-    if ( exCommand == Command.BACKUP_SKIPSCAN ) {
-      srcStorage.complementFolders();
-    } else {
-      srcStorage.scanFolder(true,false);
-    }
-
     dstStorage.readDB();
-    if ( exCommand == Command.BACKUP_SKIPSCAN ) {
-      dstStorage.complementFolders();
+    if ( doPrepare ) {
+      srcStorage.scanFolder(true,true);
+      dstStorage.scanFolder(true,true);
     } else {
-      dstStorage.scanFolder(true,false);
+      srcStorage.complementFolders();
+      dstStorage.complementFolders();
     }
-
-    if ( hisStorage != null ) {
-      hisStorage.readDB();
-      if ( exCommand == Command.BACKUP_SKIPSCAN ) {
-	hisStorage.complementFolders();
-      } else {
-	hisStorage.scanFolder(true,false);
-      }
+    if ( doExecute ) {
+      dstStorage.updateHashvalue(false);
+      Main.rearrangeEx(srcStorage,dstStorage,true);
+      dstStorage.cleanupFolder();
+      srcStorage.writeDB();
+      dstStorage.writeDB();
+    } else {
+      Main.rearrangeEx(srcStorage,dstStorage,false);
     }
-
-    backup(srcStorage,dstStorage,hisStorage,true);
-
-    // write DB
-    srcStorage.writeDB();
-    dstStorage.writeDB();
-    if ( hisStorage != null ) {
-      hisStorage.writeDB();
-    }
-
-    log.info("End Backup "+srcStorage.storageName+" "+dstStorage.storageName);
   }
 
-  public static void backup( Storage srcStorage, Storage dstStorage, Storage hisStorage, boolean forceCopy )
+  public static void rearrangeEx( Storage srcStorage, Storage dstStorage, boolean doExecute )
+  throws IOException
+  {
+    log.debug("Rearrange Files "+srcStorage.storageName+" "+dstStorage.storageName);
+    long unit = Math.max(srcStorage.timeUnit(),dstStorage.timeUnit());
+    LinkedList<File> frlist = toFileList(srcStorage); // ソートされたListに変換
+    LinkedList<File> tolist = toFileList(dstStorage); // ソートされたListに変換
+    LinkedList<Path> difflist = compare(frlist,tolist,unit); // frlist, tolist にはそれ以外が残る。
+
+    HashMap<String,File> frmap = new HashMap<>();
+    for ( File file : frlist ) {
+      if ( file.hashValue == null ) continue;
+      log.trace("rearrange use MD5 : "+file.filePath+" "+file.hashValue);
+      frmap.put(file.hashValue,file);
+    }
+    for ( File file : tolist ) {
+      if ( file.hashValue == null ) continue;
+      log.trace("rearrange find MD5 : "+file.filePath+" "+file.hashValue);
+      File orig = frmap.get(file.hashValue);
+      if ( orig == null ) continue;
+      if ( doExecute ) {
+	dstStorage.moveFile(file.filePath,orig.filePath);
+      } else {
+	log.info("move "+file.filePath+' '+orig.filePath);
+      }
+    }
+  }
+
+  // ----------------------------------------------------------------------
+  public static class ViString implements Comparable<ViString>
+  {
+    private String value;
+    private boolean visible;
+
+    public ViString( String value, boolean visible )
+    {
+      this.value = value;
+      this.visible = visible;
+    }
+
+    @Override
+    public int hashCode()
+    {
+      return value.hashCode();
+    }
+
+    @Override
+    public boolean equals( Object obj )
+    {
+      if ( obj == this ) return true;
+      if ( !(obj instanceof ViString) ) return false;
+      ViString other = (ViString)obj;
+      return this.value.equals(other.value);
+    }
+
+    @Override
+    public String toString()
+    {
+      return visible ? value : "";
+    }
+
+    @Override
+    public int compareTo( ViString other )
+    {
+      return this.value.compareTo(other.value);
+    }
+  }
+
+  public static void printConfig( java.io.PrintStream out, DataBase db, Backup bk )
+  {
+    DoubleKeyHashMap<ViString,String,String> map = new DoubleKeyHashMap<>();
+    db.toMap().forEach((key,val)->map.put(new ViString(key.key1,true),key.key2,val));
+    bk.toMap().forEach((key,val)->map.put(new ViString(key.key1+"0",false),key.key2,val));
+    map.pretyPrint(out,"","/.");
+  }
+
+  // ======================================================================
+  public static void backupEx( Storage srcStorage, Storage dstStorage, Storage hisStorage, boolean forceCopy )
   throws IOException
   {
     log.debug("Compare Files "+srcStorage.storageName+" "+dstStorage.storageName);
@@ -471,34 +597,6 @@ public class Main
       list.add(db.get(key));
     }
     return list;
-  }
-
-  public static void rearrange( Storage srcStorage, Storage dstStorage, boolean doExecute )
-  throws IOException
-  {
-    log.debug("Rearrange Files "+srcStorage.storageName+" "+dstStorage.storageName);
-    long unit = Math.max(srcStorage.timeUnit(),dstStorage.timeUnit());
-    LinkedList<File> frlist = toFileList(srcStorage); // ソートされたListに変換
-    LinkedList<File> tolist = toFileList(dstStorage); // ソートされたListに変換
-    LinkedList<Path> difflist = compare(frlist,tolist,unit); // frlist, tolist にはそれ以外が残る。
-
-    HashMap<String,File> frmap = new HashMap<>();
-    for ( File file : frlist ) {
-      if ( file.hashValue == null ) continue;
-      log.trace("rearrange use MD5 : "+file.filePath+" "+file.hashValue);
-      frmap.put(file.hashValue,file);
-    }
-    for ( File file : tolist ) {
-      if ( file.hashValue == null ) continue;
-      log.trace("rearrange find MD5 : "+file.filePath+" "+file.hashValue);
-      File orig = frmap.get(file.hashValue);
-      if ( orig == null ) continue;
-      if ( doExecute ) {
-	dstStorage.moveFile(file.filePath,orig.filePath);
-      } else {
-	log.info("move "+file.filePath+' '+orig.filePath);
-      }
-    }
   }
 
   // ======================================================================

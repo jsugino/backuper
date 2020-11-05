@@ -5,7 +5,7 @@ import mylib.backuper.Main.UsageException;
 
 import static org.junit.Assert.*;
 
-public class MainExTest
+public class MainTest
 {
   @Test
   public void testParseOption()
@@ -71,7 +71,7 @@ public class MainExTest
   public static void check( String option, boolean forceCopy, boolean doPrepare, boolean doExecute,
     String arg1, String arg2, String arg3, String ... argv )
   {
-    MainEx command = new MainEx();
+    Main command = new Main();
     command.parseOption(argv,0);
     assertEquals(option,command.option);
     assertEquals(forceCopy,command.forceCopy);
@@ -85,7 +85,7 @@ public class MainExTest
   public static void checkErr( String message, String ... argv )
   {
     try {
-      MainEx command = new MainEx();
+      Main command = new Main();
       command.parseOption(argv,0);
       fail("not exception occured");
     } catch ( UsageException ex ) {

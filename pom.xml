@@ -6,7 +6,7 @@
 
   <groupId>mylib</groupId>
   <artifactId>backuper</artifactId>
-  <version>0.1.0</version>
+  <version>0.1.1</version>
   <packaging>jar</packaging>
 
   <name>backuper</name>
@@ -42,7 +42,7 @@
 	  <archive>
 	    <manifest>
 	      <!-- main method name has to be specified -->
-	      <mainClass>mylib.backuper.MainEx</mainClass>
+	      <mainClass>mylib.backuper.Main</mainClass>
 	    </manifest>
 	  </archive>
 	</configuration>
