@@ -712,168 +712,84 @@ public class DataBase extends HashMap<String,DataBase.Storage> implements Closea
   }
 
   // --------------------------------------------------
-  public String[][] toArray()
+  public DoubleKeyHashMap<String,String,String> toMap()
   {
-    DoubleKeyHashMap<String,String,Storage> map = new DoubleKeyHashMap<>();
-    for ( Map.Entry<String,Storage> ent : this.entrySet() ) {
-      String key = ent.getKey();
-      Storage val = ent.getValue();
-      int idx = key.lastIndexOf('.');
-      String key1 = key.substring(0,idx);
-      String key2 = key.substring(idx+1);
-      map.put(key1,key2,val);
-    }
+    DoubleKeyHashMap<String,String,String> map = new DoubleKeyHashMap<>();
+    this.forEach((key,val)->{
+	int idx = key.lastIndexOf('.');
+	String key1 = key.substring(0,idx);
+	String key2 = key.substring(idx+1);
+	map.put(key1,key2,val.getRoot());
+      });
 
-    String arr[][] = new String [map.key1Set().size()][];
-    String min1[]  = new String[map.key1Set().size()];
-    String min2[]  = new String[map.key2Set().size()];
-    int cnt1 = 0;
-    int cnt2 = 0;
+    /**
+     * データ構造
+     *
+     *    ドライブ名 → key2[0]   key2[1]  ...  key2[m]
+     * フォルダの先頭→ map2[0]   map2[1]  ...  map2[m]
+     * key1[0] map1[0] arr[0][0] arr[0][1] ... arr[0][m]
+     * key1[1] map1[1] arr[1][0] arr[1][1] ... arr[1][m]
+     *  ...     ...      ...       ...     ...   ...
+     * key1[n] map1[n] arr[n][0] arr[n][1] ... arr[n][m]
+     *   ↑     ↑
+     *   ↑     フォルダの後尾
+     *   Storage の共通名 (Common, myhome.junsei など)
+     **/
+    HashMap<String,String> map1  = new HashMap<>();
+    HashMap<String,String> map2  = new HashMap<>();
 
-    cnt1 = 0;
-    for ( String key1 : map.key1Set() ) {
-      arr[cnt1] = new String[min2.length];
-      cnt2 = 0;
-      for ( String key2 : map.key2Set() ) {
-	Storage val = map.get(key1,key2);
-	arr[cnt1][cnt2] = ( val == null ) ? null : val.getRoot();
-	++cnt2;
-      }
-      ++cnt1;
-    }
+    map.forEach((key,val)->{
+	String key1 = key.key1;
+	String val1 = map1.get(key1);
+	val = commonTail(val1,val);
+	int idx = val.indexOf('/');
+	val = idx < 0 ? "" : val.substring(idx);
+	/*
+	idx = val.indexOf("home/"); // TODO : home だけを特別扱いしない。
+	if ( idx > 0 ) val = val.substring(idx+4);
+	*/
+	int len = val.length();
+	map1.put(key1,val);
+      });
+    map.forEach((key,val)->map.put(key,val.substring(0,val.length()-map1.get(key.key1).length())));
 
-    for ( cnt2 = 0; cnt2 < min2.length; ++cnt2 ) {
-      min2[cnt2] = null;
-      int num = 0;
-      for ( cnt1 = 0; cnt1 < min1.length; ++cnt1 ) {
-	if ( arr[cnt1][cnt2] != null ) {
-	  ++num;
-	  min2[cnt2] = truncCommonHead(min2[cnt2],arr[cnt1][cnt2]);
-	}
-      }
-      if ( num <= 1 ) {
-	min2[cnt2] = null;
-	continue;
-      }
-      int len = min2[cnt2].length();
-      if ( len > 0 && min2[cnt2].charAt(len-1) == '/' ) {
-	--len;
-	min2[cnt2] = min2[cnt2].substring(0,len);
-      }
-      for ( cnt1 = 0; cnt1 < min1.length; ++cnt1 ) {
-	String root = arr[cnt1][cnt2];
-	if ( root != null ) arr[cnt1][cnt2] = root.substring(len);
-      }
-    }
+    map.forEach((key,val)->{
+	String key2 = key.key2;
+	String val2 = map2.get(key2);
+	val = commonHead(val2,val);
+	int len = val.length();
+	if ( len > 0 && val.charAt(len-1) == '/' ) val = val.substring(0,--len);
+	map2.put(key2,val);
+      });
+    map.forEach((key,val)->map.put(key,val.substring(map2.get(key.key2).length())));
 
-    for ( cnt1 = 0; cnt1 < min1.length; ++cnt1 ) {
-      min1[cnt1] = null;
-      int num = 0;
-      for ( cnt2 = 0; cnt2 < min2.length; ++cnt2 ) {
-	if ( arr[cnt1][cnt2] != null ) {
-	  ++num;
-	  min1[cnt1] = truncCommonTail(min1[cnt1],arr[cnt1][cnt2]);
-	}
-      }
-      if ( num <= 1 ) {
-	min1[cnt1] = null;
-	continue;
-      }
-      int idx = min1[cnt1].indexOf('/');
-      if ( idx < 0 ) {
-	min1[cnt1] = "";
-	continue;
-      }
-      if ( idx > 0 ) {
-	min1[cnt1] = min1[cnt1].substring(idx);
-      }
-      int len = min1[cnt1].length();
-      for ( cnt2 = 0; cnt2 < min2.length; ++cnt2 ) {
-	String root = arr[cnt1][cnt2];
-	if ( root != null ) arr[cnt1][cnt2] = root.substring(0,root.length()-len);
-      }
-    }
-
-    String ret[][] = new String[min1.length+2][];
-    int cnt;
-
-    ret[0] = new String[min2.length+2];
-    cnt = 2;
-    for ( String key2 : map.key2Set() ) ret[0][cnt++] = key2;
-
-    ret[1] = new String[min2.length+2];
-    cnt = 2;
-    for ( int i = 0; i < min2.length; ++i ) ret[1][cnt++] = min2[i];
-
-    cnt = 0;
-    for ( String key1 : map.key1Set() ) {
-      ret[cnt+2] = new String[min2.length+2];
-      ret[cnt+2][0] = key1;
-      ret[cnt+2][1] = min1[cnt];
-      for ( int i = 0; i < min2.length; ++i ) ret[cnt+2][i+2] = arr[cnt][i];
-      ++cnt;
-    }
-
-    return ret;
-  }
-
-  public void printDataBase( PrintStream out )
-  {
-    String array[][] = this.toArray();
-    int maxcol = Arrays.stream(array).mapToInt(l->l.length).max().orElse(-1);
-    if ( maxcol == -1 ) {
-      log.warn("NO DATA in DB");
-      return;
-    }
-
-    for ( int i = 0; i < array.length; ++i ) {
-      String line[] = array[i];
-      if ( line.length < maxcol ) array[i] = line = Arrays.copyOf(line,maxcol);
-      for ( int j = 0; j < line.length; ++j ) {
-	if ( line[j] == null ) line[j] = "";
-	else if ( line[j].length() == 0 ) line[j] = "/.";
-      }
-    }
-
-    for ( int j = 0; j < maxcol; ++j ) {
-      int maxlen = 0;
-      for ( int i = 0; i < array.length; ++i ) {
-	maxlen = Math.max(maxlen,array[i][j].length());
-      }
-      for ( int i = 0; i < array.length; ++i ) {
-	char col[] = Arrays.copyOf(array[i][j].toCharArray(),maxlen);
-	for ( int k = array[i][j].length(); k < maxlen; ++k ) col[k] = ' ';
-	array[i][j] = new String(col);
-      }
-    }
-
-    for ( int i = 0; i < array.length; ++i ) {
-      String line[] = array[i];
-      for ( int j = 0; j < line.length; ++j ) {
-	if ( j > 0 ) out.print(' ');
-	out.print(line[j]);
-      }
-      out.println();
-    }
+    map1.forEach((key1,val1)->map.put(key1,"",val1));
+    map2.forEach((key2,val2)->map.put("",key2,val2));
+    return map;
   }
 
   public void printDataBaseAsCsv( PrintStream out )
   {
-    String arr[][] = this.toArray();
-    for ( int i = 0; i < arr.length; ++i ) {
-      String line[] = arr[i];
-      for ( int j = 0; j < line.length; ++j ) {
-	if ( j > 0 ) out.print(',');
-	String root = arr[i][j];
-	if ( root == null ) continue;
-	if ( root.length() == 0 ) root = "/.";
-	out.print(root);
+    DoubleKeyHashMap<String,String,String> map = this.toMap();
+    for ( String key2 : map.key2Set() ) {
+      out.print(","+key2);
+    }
+    out.println();
+    for ( String key1 : map.key1Set() ) {
+      out.print(key1);
+      for ( String key2 : map.key2Set() ) {
+	String val = map.get(key1,key2);
+	val =
+	  val == null ? "" :
+	  val.length() == 0 ? "/." :
+	  val;
+	out.print(","+val);
       }
       out.println();
     }
   }
 
-  public static String truncCommonHead( String str1, String str2 )
+  public static String commonHead( String str1, String str2 )
   {
     if ( str1 == null ) return str2;
     if ( str2 == null ) return str1;
@@ -881,8 +797,7 @@ public class DataBase extends HashMap<String,DataBase.Storage> implements Closea
     int len2 = str2.length();
     if ( len2 < len1 ) {
       String str = str1; str1 = str2; str2 = str;
-      len1 = str1.length();
-      len2 = str2.length();
+      int    len = len1; len1 = len2; len2 = len;
     }
     for ( int i = 0; i < len1; ++i ) {
       if ( str1.charAt(i) != str2.charAt(i) ) {
@@ -893,7 +808,7 @@ public class DataBase extends HashMap<String,DataBase.Storage> implements Closea
     return str1;
   }
 
-  public static String truncCommonTail( String str1, String str2 )
+  public static String commonTail( String str1, String str2 )
   {
     if ( str1 == null ) return str2;
     if ( str2 == null ) return str1;
@@ -901,8 +816,7 @@ public class DataBase extends HashMap<String,DataBase.Storage> implements Closea
     int len2 = str2.length();
     if ( len2 < len1 ) {
       String str = str1; str1 = str2; str2 = str;
-      len1 = str1.length();
-      len2 = str2.length();
+      int    len = len1; len1 = len2; len2 = len;
     }
     for ( int i = 0; i < len1; ++i ) {
       if ( str1.charAt(len1-i-1) != str2.charAt(len2-i-1) ) {

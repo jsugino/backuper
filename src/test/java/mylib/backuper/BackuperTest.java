@@ -1588,9 +1588,9 @@ public class BackuperTest
     try ( DataBase db = new DataBase(dbdir.toPath()) ) {
       Backup backup = db.initializeByXml(Paths.get(DataBase.class.getClassLoader()
 	  .getResource("mylib/backuper/folders.conf.xml").getPath()));
-      System.out.println("-- START --");
-      backup.printTask(System.out);
-      System.out.println("-- END --");
+      //System.out.println("-- START --");
+      //backup.printTask(System.out);
+      //System.out.println("-- END --");
     }
   }
 

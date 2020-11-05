@@ -155,8 +155,7 @@ public class MainEx
 
     } else if ( option.equals("-l") ) {
       if ( arg1 != null ) throw new UsageException("Unused Arguments for -l "+arg1);
-      database.printDataBase(System.out);
-      //bkTasks.printTask(System.out);
+      printConfig(System.out,database,bkTasks);
 
     } else if ( option.equals("-s" ) ) {
       if ( arg1 == null ) throw new UsageException("No Argument for -s");
@@ -302,5 +301,53 @@ public class MainEx
     } else {
       Main.rearrange(srcStorage,dstStorage,false);
     }
+  }
+
+  // ----------------------------------------------------------------------
+  public static class ViString implements Comparable<ViString>
+  {
+    private String value;
+    private boolean visible;
+
+    public ViString( String value, boolean visible )
+    {
+      this.value = value;
+      this.visible = visible;
+    }
+
+    @Override
+    public int hashCode()
+    {
+      return value.hashCode();
+    }
+
+    @Override
+    public boolean equals( Object obj )
+    {
+      if ( obj == this ) return true;
+      if ( !(obj instanceof ViString) ) return false;
+      ViString other = (ViString)obj;
+      return this.value.equals(other.value);
+    }
+
+    @Override
+    public String toString()
+    {
+      return visible ? value : "";
+    }
+
+    @Override
+    public int compareTo( ViString other )
+    {
+      return this.value.compareTo(other.value);
+    }
+  }
+
+  public static void printConfig( java.io.PrintStream out, DataBase db, Backup bk )
+  {
+    DoubleKeyHashMap<ViString,String,String> map = new DoubleKeyHashMap<>();
+    db.toMap().forEach((key,val)->map.put(new ViString(key.key1,true),key.key2,val));
+    bk.toMap().forEach((key,val)->map.put(new ViString(key.key1+"0",false),key.key2,val));
+    map.pretyPrint(out,"","/.");
   }
 }

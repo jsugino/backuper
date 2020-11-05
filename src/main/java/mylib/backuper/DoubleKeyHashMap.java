@@ -1,29 +1,27 @@
 package mylib.backuper;
 
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.Set;
 import java.util.TreeSet;
 import java.util.function.BiFunction;
 
-public class DoubleKeyHashMap<T1, T2, T3>
+public class DoubleKeyHashMap<T1, T2, T3> extends HashMap<DoubleKeyHashMap.Pair<T1, T2>, T3>
 {
-  private HashMap<Pair<T1, T2>, T3> hashMap;
   private TreeSet<T1> key1Set;
   private TreeSet<T2> key2Set;
 
   public DoubleKeyHashMap()
   {
-    hashMap = new HashMap<Pair<T1, T2>, T3>();
     key1Set = new TreeSet<T1>();
     key2Set = new TreeSet<T2>();
   }
 
-  @SuppressWarnings("hiding")
-  class Pair<T1, T2>
+  public static class Pair<T1, T2>
   {
-    T1 key1;
-    T2 key2;
+    public T1 key1;
+    public T2 key2;
 
     Pair()
     {
@@ -45,27 +43,34 @@ public class DoubleKeyHashMap<T1, T2, T3>
     @Override
     public boolean equals( Object obj )
     {
-      if (obj == this)
-	return true;
-      if (!(obj instanceof Pair)) {
-	return false;
-      }
-      @SuppressWarnings("unchecked")
-	Pair<T1, T2> pair = (Pair<T1, T2>) obj;
-
-      if (this.key1.equals(pair.key1) && this.key2.equals(pair.key2)) {
-	return true;
-      }
-      return false;
+      if ( obj == this ) return true;
+      if ( !(obj instanceof Pair) ) return false;
+      Pair pair = (Pair)obj;
+      return this.key1.equals(pair.key1) && this.key2.equals(pair.key2);
     }
+
+    @Override
+    public String toString()
+    {
+      return "[" + this.key1 + "," + this.key2 + "]";
+    }
+  }
+
+  @Override
+  public T3 put( Pair<T1,T2> key, T3 value )
+  {
+    T3 previouseValue = super.put(key,value);
+    this.key1Set.add(key.key1);
+    this.key2Set.add(key.key2);
+    return previouseValue;
   }
 
   public T3 put( T1 key1, T2 key2, T3 value )
   {
     T3 previouseValue = null;
     Pair<T1,T2>key = new Pair<T1, T2>(key1,key2);
-    previouseValue = this.hashMap.get(key);
-    this.hashMap.put(key,value);
+    previouseValue = this.get(key);
+    this.put(key,value);
     this.key1Set.add(key1);
     this.key2Set.add(key2);
     return previouseValue;
@@ -74,26 +79,21 @@ public class DoubleKeyHashMap<T1, T2, T3>
   public T3 get( T1 key1, T2 key2 )
   {
     T3 value = null;
-    value = this.hashMap.get(new Pair<T1, T2>(key1, key2));
+    value = this.get(new Pair<T1, T2>(key1, key2));
     return value;
   }
 
-  public T3 remove( T1 key1, T2 key2 )
+  public T3 removePair( T1 key1, T2 key2 )
   {
     T3 previouseValue = null;
-    previouseValue = this.hashMap.get(new Pair<T1, T2>(key1, key2));
-    this.hashMap.remove(new Pair<T1, T2>(key1, key2));
+    previouseValue = this.get(new Pair<T1, T2>(key1, key2));
+    this.remove(new Pair<T1, T2>(key1, key2));
     return previouseValue;
   }
 
   public boolean containsKey( T1 key1, T2 key2 )
   {
-    return this.hashMap.containsKey(new Pair<T1, T2>(key1, key2));
-  }
-
-  public Set<Pair<T1, T2>> keySet()
-  {
-    return this.hashMap.keySet();
+    return this.containsKey(new Pair<T1, T2>(key1, key2));
   }
 
   public Set<T1> key1Set()
@@ -106,16 +106,6 @@ public class DoubleKeyHashMap<T1, T2, T3>
     return this.key2Set;
   }
 
-  public int size()
-  {
-    return this.hashMap.size();
-  }
-
-  public Iterator<Pair<T1, T2>> iterator()
-  {
-    return this.keySet().iterator();
-  }
-
   public Iterator<T1> iterator1()
   {
     return this.key1Set.iterator();
@@ -126,9 +116,9 @@ public class DoubleKeyHashMap<T1, T2, T3>
     return this.key2Set.iterator();
   }
 
-  public T3 computeIfAbsent(T1 key1, T2 key2, BiFunction<T1,T2,T3> value)
+  public T3 computeIfAbsent( T1 key1, T2 key2, BiFunction<T1,T2,T3> value )
   {
-    return this.hashMap.computeIfAbsent(new Pair<>(key1,key2), (k) -> value.apply(key1,key2));
+    return this.computeIfAbsent(new Pair<>(key1,key2), (k) -> value.apply(key1,key2));
   }
 
   @Override
@@ -140,12 +130,58 @@ public class DoubleKeyHashMap<T1, T2, T3>
     while (itr.hasNext()) {
       Pair<T1, T2> keyPair = itr.next();
       stringBuffer.append("[" + keyPair.key1 + "," + keyPair.key2 + "]="
-	+ this.hashMap.get(new Pair<T1, T2>(keyPair.key1,keyPair.key2)));
+	+ this.get(new Pair<T1, T2>(keyPair.key1,keyPair.key2)));
       if(itr.hasNext()) {
 	stringBuffer.append(",");
       }
     }
     stringBuffer.append("}");
     return stringBuffer.toString();
+  }
+
+  // --------------------------------------------------
+  public void pretyPrint( java.io.PrintStream out, String whenNull, String whenEmpty )
+  {
+    String lines[] = new String[this.key1Set.size()+1];
+    lines[0] = "";
+    int cnt = 1;
+    for ( T1 key1 : this.key1Set ) lines[cnt++] = key1.toString();
+    padding(lines);
+    for ( T2 key2 : this.key2Set ) {
+      lines[0] = lines[0] + ' ' + key2.toString();
+      cnt = 0;
+      for ( T1 key1 : this.key1Set ) {
+	T3 val = this.get(key1,key2);
+	String str;
+	if ( val == null ) {
+	  str = whenNull;
+	} else {
+	  str = val.toString();
+	  if ( str.length() == 0 ) str = whenEmpty;
+	}
+	lines[++cnt] += " " + str;
+      }
+      padding(lines);
+    }
+    for ( String line : lines ) {
+      for ( int i = line.length(); i > 0; --i ) {
+	if ( line.charAt(i-1) != ' ' ) {
+	  line = line.substring(0,i);
+	  break;
+	}
+      }
+      out.println(line);
+    }
+  }
+
+  public static void padding( String lines[] )
+  {
+    int maxlen = Arrays.stream(lines).mapToInt(l->l.length()).max().orElse(-1);
+    if ( maxlen < 0 ) return;
+    for ( int i = 0; i < lines.length; ++i ) {
+      char col[] = Arrays.copyOf(lines[i].toCharArray(),maxlen);
+      for ( int k = lines[i].length(); k < maxlen; ++k ) col[k] = ' ';
+      lines[i] = new String(col);
+    }
   }
 }

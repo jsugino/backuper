@@ -3,8 +3,8 @@ package mylib.backuper;
 import static mylib.backuper.BackuperTest.checkContents;
 import static mylib.backuper.BackuperTest.event;
 
-import static mylib.backuper.DataBase.truncCommonHead;
-import static mylib.backuper.DataBase.truncCommonTail;
+import static mylib.backuper.DataBase.commonHead;
+import static mylib.backuper.DataBase.commonTail;
 
 import static org.junit.Assert.assertEquals;
 
@@ -461,25 +461,25 @@ public class DataBaseTest
   @Test
   public void testTrunc()
   {
-    assertEquals(null,truncCommonHead(null,null));
-    assertEquals("str111",truncCommonHead("str111",null));
-    assertEquals("str222",truncCommonHead(null,"str222"));
-    assertEquals("",truncCommonHead("str111",""));
-    assertEquals("",truncCommonHead("","str222"));
-    assertEquals("str",truncCommonHead("str111","str222"));
-    assertEquals("str",truncCommonHead("str","str222"));
-    assertEquals("str",truncCommonHead("str111","str"));
-    assertEquals("",truncCommonHead("str111","STR222"));
+    assertEquals(null,commonHead(null,null));
+    assertEquals("str111",commonHead("str111",null));
+    assertEquals("str222",commonHead(null,"str222"));
+    assertEquals("",commonHead("str111",""));
+    assertEquals("",commonHead("","str222"));
+    assertEquals("str",commonHead("str111","str222"));
+    assertEquals("str",commonHead("str","str222"));
+    assertEquals("str",commonHead("str111","str"));
+    assertEquals("",commonHead("str111","STR222"));
 
-    assertEquals(null,truncCommonTail(null,null));
-    assertEquals("111str",truncCommonTail("111str",null));
-    assertEquals("222str",truncCommonTail(null,"222str"));
-    assertEquals("",truncCommonTail("111str",""));
-    assertEquals("",truncCommonTail("","222str"));
-    assertEquals("str",truncCommonTail("111str","222str"));
-    assertEquals("str",truncCommonTail("str","222str"));
-    assertEquals("str",truncCommonTail("111str","str"));
-    assertEquals("",truncCommonTail("111str","222STR"));
+    assertEquals(null,commonTail(null,null));
+    assertEquals("111str",commonTail("111str",null));
+    assertEquals("222str",commonTail(null,"222str"));
+    assertEquals("",commonTail("111str",""));
+    assertEquals("",commonTail("","222str"));
+    assertEquals("str",commonTail("111str","222str"));
+    assertEquals("str",commonTail("str","222str"));
+    assertEquals("str",commonTail("111str","str"));
+    assertEquals("",commonTail("111str","222STR"));
   }
 
   @Test
@@ -514,8 +514,43 @@ public class DataBaseTest
 	  "blog.C               (no *.db file) /mnt/C/BACKUP/Downloads/5.blog",
 	  "blog.comb            (no *.db file) ftp://my.host.ne.jp/www/blog",
 	});
-      db.printDataBase(System.out);
-      bk.printTask(System.out);
+      String exp1[] = new String[]{
+	"                                           C                        ",
+	"                                           /mnt/C                   ",
+	"Common               /Common               /BACKUP                  ",
+	"                                           ORIG                     ",
+	"Linux.junsei         /home/junsei          /BACKUP/Linux            ",
+	"                                           ORIG                     ",
+	"Users.history.junsei /Users.history/junsei                          ",
+	"                                                                    ",
+	"Users.junsei         /Users/junsei         /.                       ",
+	"                                           ORIG                     ",
+	"VMs                  /Virtual Machines     /BACKUP                  ",
+	"                                           ORIG                     ",
+	"blog                 /.                    /BACKUP/Downloads/5.blog ",
+	"                                           ORIG                     ",
+      };
+      String exp2[] = new String[]{
+	"D      G                         SSD comb",
+	"/mnt/D /run/media/junsei/HD-LBU3 /.  ftp://my.host.ne.jp/www/blog",
+	"/.     /.",
+	"daily  monthly",
+	"/Linux /Linux                    /.",
+	"daily  monthly",
+	"/.     /.",
+	"ORIG   monthly",
+	"/.     /.",
+	"daily  monthly",
+	"/.     /.",
+	"daily  monthly",
+	"                                     /.",
+	"                                     bupd",
+      };
+      String exp[] = new String[exp1.length];
+      for ( int i = 0; i < exp.length; ++i ) exp[i] = exp1[i] + exp2[i];
+      //MainEx.printConfig(System.out,db,bk);
+      checkContents(out->MainEx.printConfig(out,db,bk),exp);
+      db.printDataBaseAsCsv(System.out);
     }
     System.out.println("END!!");
   }

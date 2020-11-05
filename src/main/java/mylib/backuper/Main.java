@@ -146,7 +146,7 @@ public class Main
 		storage.getRoot()).println();
 	    }
 	  }
-	  backup.printTask(System.out);
+	  //backup.printTask(System.out);
 	}
 	break;
       }
