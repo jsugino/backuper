@@ -1000,9 +1000,9 @@ public class DataBase extends HashMap<String,DataBase.Storage> implements Closea
 	  this.put(strName,storage);
 	  subfolders += 1;
 	} else {
-	  if ( name != null ) log.warn("Ignore name attribute ("+name+") of dir="+dir);
+	  if ( name != null ) log.warn("Ignore name attribute ("+name+") of dir="+dir,new Exception("Ignore name attribute"));
 	  if ( storage != null && (storage.ignoreFilePats.size() > 0 || storage.ignoreFolderPats.size() > 0) ) {
-	    log.warn("Ignore name <excludes> tag of dir="+dir);
+	    log.warn("Ignore name <excludes> tag of dir="+dir,new Exception("Ignore name <excludes> tag"));
 	  }
 	  subfolders += num;
 	}
@@ -1053,8 +1053,7 @@ public class DataBase extends HashMap<String,DataBase.Storage> implements Closea
   public static void nodeerror( String message, Node node )
   throws IOException, TransformerException
   {
-    log.error(message+" : "+serialize(node));
-    new Exception(message).printStackTrace();
+    log.error(message+" : "+serialize(node),new Exception(message));
   }
 
   public static Element selectElement( Node node )

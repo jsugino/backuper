@@ -6,6 +6,7 @@ import java.util.Iterator;
 import java.util.Set;
 import java.util.TreeSet;
 import java.util.function.BiFunction;
+import java.util.function.Function;
 
 public class DoubleKeyHashMap<T1, T2, T3> extends HashMap<DoubleKeyHashMap.Pair<T1, T2>, T3>
 {
@@ -140,33 +141,27 @@ public class DoubleKeyHashMap<T1, T2, T3> extends HashMap<DoubleKeyHashMap.Pair<
   }
 
   // --------------------------------------------------
-  public void pretyPrint( java.io.PrintStream out, String whenNull, String whenEmpty )
+  public void prettyPrint( java.io.PrintStream out, String separator,
+    Function<T1,String> key1Mapper, Function<T2,String> key2Mapper, Function<T3,String> valueMapper )
   {
-    String lines[] = new String[this.key1Set.size()+1];
-    lines[0] = "";
+    StringBuffer lines[] = new StringBuffer[this.key1Set.size()+1];
+    for ( int i = 0; i < lines.length; ++i ) lines[i] = new StringBuffer();
     int cnt = 1;
-    for ( T1 key1 : this.key1Set ) lines[cnt++] = key1.toString();
+    for ( T1 key1 : this.key1Set ) lines[cnt++].append(key1Mapper.apply(key1));
     padding(lines);
     for ( T2 key2 : this.key2Set ) {
-      lines[0] = lines[0] + ' ' + key2.toString();
+      lines[0].append(separator).append(key2Mapper.apply(key2));
       cnt = 0;
       for ( T1 key1 : this.key1Set ) {
 	T3 val = this.get(key1,key2);
-	String str;
-	if ( val == null ) {
-	  str = whenNull;
-	} else {
-	  str = val.toString();
-	  if ( str.length() == 0 ) str = whenEmpty;
-	}
-	lines[++cnt] += " " + str;
+	lines[++cnt].append(separator).append(valueMapper.apply(val));
       }
       padding(lines);
     }
-    for ( String line : lines ) {
+    for ( StringBuffer line : lines ) {
       for ( int i = line.length(); i > 0; --i ) {
 	if ( line.charAt(i-1) != ' ' ) {
-	  line = line.substring(0,i);
+	  line.setLength(i);
 	  break;
 	}
       }
@@ -174,14 +169,12 @@ public class DoubleKeyHashMap<T1, T2, T3> extends HashMap<DoubleKeyHashMap.Pair<
     }
   }
 
-  public static void padding( String lines[] )
+  public static void padding( StringBuffer lines[] )
   {
     int maxlen = Arrays.stream(lines).mapToInt(l->l.length()).max().orElse(-1);
     if ( maxlen < 0 ) return;
     for ( int i = 0; i < lines.length; ++i ) {
-      char col[] = Arrays.copyOf(lines[i].toCharArray(),maxlen);
-      for ( int k = lines[i].length(); k < maxlen; ++k ) col[k] = ' ';
-      lines[i] = new String(col);
+      for ( int k = lines[i].length(); k < maxlen; ++k ) lines[i].append(' ');
     }
   }
 }

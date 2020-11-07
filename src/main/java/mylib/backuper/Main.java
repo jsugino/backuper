@@ -169,7 +169,7 @@ public class Main
 
     } else if ( option.equals("-l") ) {
       if ( arg1 != null ) throw new UsageException("Unused Arguments for -l "+arg1);
-      printConfig(System.out,database,bkTasks);
+      printConfig(System.out,database,bkTasks,16);
 
     } else if ( option.equals("-s" ) ) {
       if ( arg1 == null ) throw new UsageException("No Argument for -s");
@@ -345,52 +345,41 @@ public class Main
     }
   }
 
-  // ----------------------------------------------------------------------
-  public static class ViString implements Comparable<ViString>
+  public static void printConfig( java.io.PrintStream out, DataBase db, Backup bk, int maxlen )
   {
-    private String value;
-    private boolean visible;
+    DoubleKeyHashMap<String,String,String> map = new DoubleKeyHashMap<>();
+    db.toMap().forEach((key,path)->{
+	map.put(key,path);
+	String base = key.key1;
+	String key1 = base;
+	String key2 = key.key2;
+	int cnt = 0;
+	int max = maxlen;
+	while ( path.length() > max ) {
+	  int idx = path.lastIndexOf('/',max);
+	  if ( idx <= 0 || path.charAt(idx-1) == '/' ) {
+	    idx = path.indexOf('/',max);
+	    if ( idx < 0 ) break;
+	  }
+	  max = Math.max(max,idx);
+	  map.put(key1,key2,path.substring(0,idx));
+	  cnt += 10;
+	  key1 = base+String.format("%04d",cnt);
+	  path = path.substring(idx);
+	  map.put(key1,key2,path);
+	}
+      });
+    bk.toMap().forEach((key,val)->map.put(key.key1+"9990",key.key2,val));
 
-    public ViString( String value, boolean visible )
-    {
-      this.value = value;
-      this.visible = visible;
-    }
-
-    @Override
-    public int hashCode()
-    {
-      return value.hashCode();
-    }
-
-    @Override
-    public boolean equals( Object obj )
-    {
-      if ( obj == this ) return true;
-      if ( !(obj instanceof ViString) ) return false;
-      ViString other = (ViString)obj;
-      return this.value.equals(other.value);
-    }
-
-    @Override
-    public String toString()
-    {
-      return visible ? value : "";
-    }
-
-    @Override
-    public int compareTo( ViString other )
-    {
-      return this.value.compareTo(other.value);
-    }
-  }
-
-  public static void printConfig( java.io.PrintStream out, DataBase db, Backup bk )
-  {
-    DoubleKeyHashMap<ViString,String,String> map = new DoubleKeyHashMap<>();
-    db.toMap().forEach((key,val)->map.put(new ViString(key.key1,true),key.key2,val));
-    bk.toMap().forEach((key,val)->map.put(new ViString(key.key1+"0",false),key.key2,val));
-    map.pretyPrint(out,"","/.");
+    map.prettyPrint(out," ",
+      (k ->
+	k.length() > 0 &&
+	k.charAt(k.length()-1) == '0' ? "" : k),
+      k->k,
+      (v ->
+	v == null       ? "        " :
+	v.length() == 0 ? "/.      " :
+	String.format("%-8s",v)));
   }
 
   // ======================================================================

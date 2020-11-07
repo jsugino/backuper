@@ -8,7 +8,7 @@
     </encoder>
   </appender>
   <appender name="FILE" class="ch.qos.logback.core.FileAppender">
-    <file>backup.log</file>
+    <file>${LOG_FILE:-/var/log/backuper/backup.log}</file>
     <encoder>
       <pattern>%date %-5level %msg%n</pattern>
     </encoder>
