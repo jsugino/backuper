@@ -65,6 +65,7 @@ public class DataBase extends HashMap<String,DataBase.Storage> implements Closea
     private LinkedList<Folder> folders = null;		// 全てのフォルダのリスト
     private LinkedList<Pattern> ignoreFilePats = new LinkedList<>();
     private LinkedList<Pattern> ignoreFolderPats = new LinkedList<>();
+    public String selfHash = null;
 
     public Storage( String storageName )
     {
@@ -206,6 +207,7 @@ public class DataBase extends HashMap<String,DataBase.Storage> implements Closea
 	  file.length = Long.parseLong(line.substring(i2+1,i3));
 	}
       }
+      this.selfHash = calcSelfMD5();
     }
 
     public void writeDB()
@@ -213,6 +215,28 @@ public class DataBase extends HashMap<String,DataBase.Storage> implements Closea
     {
       Path dbpath = dbFolder.resolve(storageName+".db");
       log.debug("Write DataBase "+storageName+' '+dbpath);
+      if ( calcSelfMD5().equals(this.selfHash) ) {
+	log.info("Unchanged DataBase "+storageName+' '+dbpath);
+	return;
+      }
+
+      Path fpath = findDBFilePath();
+      long now = System.currentTimeMillis();
+      Path dpath = Paths.get(this.getRoot())
+	.relativize(
+	  DataBase.this.dbFolder.resolve(this.storageName+".db")
+	  .toAbsolutePath())
+	.normalize();
+      if ( !dpath.startsWith("..") ) {
+	Path dp = dpath;
+	folders.stream()
+	  .flatMap(folder->folder.files.stream())
+	  .filter(file->file.filePath.equals(dp))
+	  .forEach(file->file.lastModified = now);
+      } else {
+	dpath = null;
+      }
+      this.selfHash = calcSelfMD5();
 
       try ( PrintStream out = new PrintStream(Files.newOutputStream(dbpath)) ) {
 	for ( Folder folder : folders ) {
@@ -220,7 +244,14 @@ public class DataBase extends HashMap<String,DataBase.Storage> implements Closea
 	  out.println(folder.folderPath.toString());
 	  for ( File file : folder.files ) {
 	    if ( file.hashValue == null ) continue;
-	    file.dump(out);
+	    if ( file.filePath.equals(fpath) ) {
+	      String orig = file.hashValue;
+	      file.hashValue = "0000000000000000000000";
+	      file.dump(out);
+	      file.hashValue = orig;
+	    } else {
+	      file.dump(out);
+	    }
 	  }
 	}
       }
@@ -525,6 +556,42 @@ public class DataBase extends HashMap<String,DataBase.Storage> implements Closea
       return getDigestString();
     }
 
+    public String calcSelfMD5()
+    {
+      Path root = Paths.get(this.getRoot());
+      Path dbpath = findDBFilePath();
+      /*
+      HashSet<Path> dbpaths = new HashSet<>();
+      DataBase.this.forEach((k,v)->dbpaths.add(
+	  root.relativize(dbFolder.resolve(k+".db").toAbsolutePath())));
+      */
+      //System.out.println("dbpaths = "+dbpaths);
+      //System.out.println("root = "+this.getRoot());
+      digest.reset();
+      try ( PrintStream out = new PrintStream(new OutputStream(){
+	  public void write( int b ) { digest.update((byte)b); }
+	}) ) {
+	for ( Folder folder : folders ) {
+	  if ( folder.files.size() == 0 ) continue;
+	  out.println(folder.folderPath.toString());
+	  for ( File file : folder.files ) {
+	    if ( file.hashValue == null ) continue;
+	    //System.out.println("file = "+file);
+	    if ( file.filePath.equals(dbpath) ) {
+	      String orig = file.hashValue;
+	      //System.out.println("replace ("+file.filePath+") = "+orig);
+	      file.hashValue = "0000000000000000000000";
+	      file.dump(out);
+	      file.hashValue = orig;
+	    } else {
+	      file.dump(out);
+	    }
+	  }
+	}
+      }
+      return getDigestString();
+    }
+
     public String getDigestString()
     {
       String str = Base64.getEncoder().encodeToString(digest.digest());
@@ -631,6 +698,15 @@ public class DataBase extends HashMap<String,DataBase.Storage> implements Closea
       this.length = length;
     }
 
+    public File( File orig )
+    {
+      this.filePath = orig.filePath;
+      this.type = orig.type;
+      this.hashValue = orig.hashValue;
+      this.lastModified = orig.lastModified;
+      this.length = orig.length;
+    }
+
     @Override
     public Path getPath()
     {
@@ -646,6 +722,19 @@ public class DataBase extends HashMap<String,DataBase.Storage> implements Closea
     public String toString()
     {
       return filePath.toString()+'('+hashValue+','+STDFORMAT.format(new Date(lastModified))+','+length+')';
+    }
+
+    @Override
+    public boolean equals( Object obj )
+    {
+      if ( obj == null || !(obj instanceof File) ) return false;
+      File oth = (File)obj;
+      return
+	this.filePath.equals(oth.filePath) &&
+	this.type == oth.type &&
+	this.hashValue.equals(oth.hashValue) &&
+	this.lastModified == oth.lastModified &&
+	this.length == oth.length;
     }
   }
 
@@ -1110,6 +1199,20 @@ public class DataBase extends HashMap<String,DataBase.Storage> implements Closea
     }
 
     return true;
+  }
+
+  public Path findDBFilePath()
+  {
+    return this.values().stream()
+      .filter(storage->storage instanceof LocalStorage)
+      .map(storage->
+	Paths.get(storage.getRoot())
+	.relativize(
+	  dbFolder.resolve(storage.storageName+".db")
+	  .toAbsolutePath())
+	.normalize())
+      .filter(p->!p.startsWith(".."))
+      .reduce(null,(p1,p2)->p2);
   }
 
   // ==================================================

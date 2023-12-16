@@ -22,7 +22,8 @@ target
 
 .project
 .classpath
-.settings
+workbench.xmi
+.settings/
 
 ############
 ## Derby

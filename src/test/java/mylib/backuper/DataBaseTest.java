@@ -2,18 +2,24 @@ package mylib.backuper;
 
 import static mylib.backuper.BackuperTest.checkContents;
 import static mylib.backuper.BackuperTest.event;
+import static mylib.backuper.BackuperTest.createFiles;
 
 import static mylib.backuper.DataBase.commonHead;
 import static mylib.backuper.DataBase.commonTail;
 
-import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.*;
 
-import java.io.File;
+import java.io.IOException;
+import java.io.InputStream;
+import java.util.Base64;
+import java.security.MessageDigest;
 import java.lang.reflect.Field;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.LinkedList;
 import java.util.Map;
+import java.util.List;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
@@ -24,11 +30,12 @@ import org.junit.Test;
 import org.junit.rules.TemporaryFolder;
 
 import mylib.backuper.DataBase.Storage;
+import mylib.backuper.DataBase.File;
 
 public class DataBaseTest
 {
   @Rule
-  public TemporaryFolder tempdir = new TemporaryFolder(new File("target"));
+  public TemporaryFolder tempdir = new TemporaryFolder(new java.io.File("target"));
 
   @BeforeClass public static void initLogger() { BackuperTest.initLogger(); }
   @Before public void initEvent() { event.list.clear(); }
@@ -561,5 +568,262 @@ public class DataBaseTest
       db.printDataBaseAsCsv(System.out);
     }
     System.out.println("END!!");
+  }
+
+  @Test
+  public void testDataBaseFile()
+  throws Exception
+  {
+    final String SEP1 = "======================================================================";
+    final String SEP2 = "----------------------------------------------------------------------";
+    java.io.File root = tempdir.getRoot();
+    java.io.File dbdir = new java.io.File(root,"dic");
+    java.io.File srcdir = new java.io.File(root,"src");
+    createFiles(root,new Object[]{
+	"dic", new Object[]{
+	  Main.CONFIGNAME, new String[]{
+	    "test.src="+root.getAbsolutePath(),
+	  },
+	},
+	"src", new Object[]{
+	  "a", "aa",
+	  "b", "bbb",
+	},
+      });
+    Path dbpath = dbdir.toPath().resolve("test.src.db");
+    File cof, dbf, aaf, bbf;
+
+    try ( DataBase db = new DataBase(dbdir.toPath()) ) {
+      db.initializeByFile(dbdir.toPath().resolve(Main.CONFIGNAME));
+      DataBase.Storage storage = db.get("test.src");
+      storage.readDB(); // (nothing)
+
+      System.out.println(SEP1);
+      System.out.println("MD5 = "+storage.selfHash);
+
+      storage.scanFolder(true,false); // conf, a, b
+      storage.updateHashvalue(true);
+      storage.writeDB(); // conf, a, b
+
+      System.out.println("MD5 = "+storage.calcSelfMD5()+", "+storage.selfHash+", "+calcMD5(dbpath));
+      storage.dump(System.out);
+      System.out.println(SEP2);
+      Files.readAllLines(dbpath).forEach(System.out::println);
+
+      Map<String,File> map = storage.getAllFiles().stream().collect(
+	Collectors.groupingBy(f->f.getPath().toString(),Collectors.reducing(null,(a,b)->b)));
+      cof = new File(map.get("dic/folders.conf"));
+      aaf = new File(map.get("src/a"));
+      bbf = new File(map.get("src/b"));
+    }
+
+    try ( DataBase db = new DataBase(dbdir.toPath()) ) {
+      db.initializeByFile(dbdir.toPath().resolve(Main.CONFIGNAME));
+      DataBase.Storage storage = db.get("test.src");
+      storage.readDB(); // conf, a, b
+
+      System.out.println(SEP1);
+      System.out.println("MD5 = "+storage.selfHash);
+
+      storage.scanFolder(true,false); // conf, db(conf, a, b), a, b
+      storage.updateHashvalue(true);
+      storage.writeDB(); // UPDATE : conf, db(conf, db, a, b), a, b
+
+      System.out.println("MD5 = "+storage.calcSelfMD5()+", "+storage.selfHash+", "+calcMD5(dbpath));
+      storage.dump(System.out);
+      System.out.println(SEP2);
+      Files.readAllLines(dbpath).forEach(System.out::println);
+
+      Map<String,File> map = storage.getAllFiles().stream().collect(
+	Collectors.groupingBy(f->f.getPath().toString(),Collectors.reducing(null,(a,b)->b)));
+      assertEquals(cof,map.get("dic/folders.conf"));
+      dbf = new File(map.get("dic/test.src.db"));// db(conf, a, b)
+      assertEquals(aaf,map.get("src/a"));
+      assertEquals(bbf,map.get("src/b"));
+    }
+
+    // --------------------------------------------------
+    String exp[] = new String[]{
+      ".	0",
+      "dic	0",
+      "*	folders.conf",
+      "*	236	test.src.db",
+      "src	0",
+      "QSS8CpM1wn8IbyS6IHpJEg	*	2	a",
+      "CPjgJgxkQYUQzvsrBu7lzQ	*	3	b",
+    };
+    // ------------------------------
+
+    try ( DataBase db = new DataBase(dbdir.toPath()) ) {
+      db.initializeByFile(dbdir.toPath().resolve(Main.CONFIGNAME));
+      DataBase.Storage storage = db.get("test.src");
+      storage.readDB(); // conf, db(conf, db, a, b), a, b
+
+      System.out.println(SEP1);
+      System.out.println("MD5 = "+storage.selfHash);
+
+      storage.scanFolder(true,false); // conf, db(conf, db, a, b), a, b
+      storage.updateHashvalue(true);
+      storage.writeDB(); // conf, db(conf, db, a, b), a, b
+
+      System.out.println("MD5 = "+storage.calcSelfMD5()+", "+storage.selfHash+", "+calcMD5(dbpath));
+      storage.dump(System.out); // conf, db(conf, db, a, b), a, b
+      System.out.println(SEP2);
+      Files.readAllLines(dbpath).forEach(System.out::println);
+
+      checkContents(storage::dump,exp);
+      Map<String,File> map = storage.getAllFiles().stream().collect(
+	Collectors.groupingBy(f->f.getPath().toString(),Collectors.reducing(null,(a,b)->b)));
+      assertEquals(cof,map.get("dic/folders.conf"));
+      assertNotEquals(dbf,map.get("dic/test.src.db"));
+      dbf = new File(map.get("dic/test.src.db")); // db(conf, db, a, b)
+      assertEquals(aaf,map.get("src/a"));
+      assertEquals(bbf,map.get("src/b"));
+    }
+
+    try ( DataBase db = new DataBase(dbdir.toPath()) ) {
+      db.initializeByFile(dbdir.toPath().resolve(Main.CONFIGNAME));
+      DataBase.Storage storage = db.get("test.src");
+      storage.readDB(); // conf, db(conf, db, a, b), a, b
+
+      System.out.println(SEP1);
+      System.out.println("MD5 = "+storage.selfHash);
+
+      storage.scanFolder(true,false);
+      storage.updateHashvalue(true);
+      storage.writeDB();
+
+      System.out.println("MD5 = "+storage.calcSelfMD5()+", "+storage.selfHash+", "+calcMD5(dbpath));
+      storage.dump(System.out);
+      System.out.println(SEP2);
+      Files.readAllLines(dbpath).forEach(System.out::println);
+
+      checkContents(storage::dump,exp);
+      Map<String,File> map = storage.getAllFiles().stream().collect(
+	Collectors.groupingBy(f->f.getPath().toString(),Collectors.reducing(null,(a,b)->b)));
+      assertEquals(cof,map.get("dic/folders.conf"));
+      //assertEquals(dbf,map.get("dic/test.src.db")); // ToDo : enable this assertion
+      assertEquals(aaf,map.get("src/a"));
+      assertEquals(bbf,map.get("src/b"));
+    }
+
+    try ( DataBase db = new DataBase(dbdir.toPath()) ) {
+      db.initializeByFile(dbdir.toPath().resolve(Main.CONFIGNAME));
+      DataBase.Storage storage = db.get("test.src");
+      storage.readDB(); // conf, db(conf, db, a, b), a, b
+
+      System.out.println(SEP1);
+      System.out.println("MD5 = "+storage.selfHash);
+
+      storage.scanFolder(true,false);
+      storage.updateHashvalue(true);
+      storage.writeDB();
+
+      System.out.println("MD5 = "+storage.calcSelfMD5()+", "+storage.selfHash+", "+calcMD5(dbpath));
+      storage.dump(System.out);
+      System.out.println(SEP2);
+      Files.readAllLines(dbpath).forEach(System.out::println);
+
+      checkContents(storage::dump,exp);
+      Map<String,File> map = storage.getAllFiles().stream().collect(
+	Collectors.groupingBy(f->f.getPath().toString(),Collectors.reducing(null,(a,b)->b)));
+      assertEquals(cof,map.get("dic/folders.conf"));
+      //assertEquals(dbf,map.get("dic/test.src.db")); // ToDo : enable this assertion
+      assertEquals(aaf,map.get("src/a"));
+      assertEquals(bbf,map.get("src/b"));
+    }
+
+    try ( DataBase db = new DataBase(dbdir.toPath()) ) {
+      db.initializeByFile(dbdir.toPath().resolve(Main.CONFIGNAME));
+      DataBase.Storage storage = db.get("test.src");
+      storage.readDB(); // conf, db(conf, db, a, b), a, b
+
+      System.out.println(SEP1);
+      System.out.println("MD5 = "+storage.selfHash);
+
+      storage.scanFolder(true,false);
+      storage.updateHashvalue(true);
+      storage.writeDB();
+
+      System.out.println("MD5 = "+storage.calcSelfMD5()+", "+storage.selfHash+", "+calcMD5(dbpath));
+      storage.dump(System.out);
+      System.out.println(SEP2);
+      Files.readAllLines(dbpath).forEach(System.out::println);
+
+      checkContents(storage::dump,exp);
+      Map<String,File> map = storage.getAllFiles().stream().collect(
+	Collectors.groupingBy(f->f.getPath().toString(),Collectors.reducing(null,(a,b)->b)));
+      assertEquals(cof,map.get("dic/folders.conf"));
+      //assertEquals(dbf,map.get("dic/test.src.db")); // ToDo : enable this assertion
+      assertEquals(aaf,map.get("src/a"));
+      assertEquals(bbf,map.get("src/b"));
+    }
+  }
+
+  public static String calcMD5( Path path )
+  throws IOException, java.security.NoSuchAlgorithmException
+  {
+    MessageDigest digest = MessageDigest.getInstance("MD5");
+    digest.reset();
+    try ( InputStream in = Files.newInputStream(path) ) {
+      byte buf[] = new byte[1024*64];
+      int len;
+      while ( (len = in.read(buf)) > 0 ) {
+	digest.update(buf,0,len);
+      }
+    }
+    String str = Base64.getEncoder().encodeToString(digest.digest());
+    int idx = str.indexOf('=');
+    if ( idx > 0 ) str = str.substring(0,idx);
+    return str;
+  }
+
+  @Test
+  public void testFindDBFilePath()
+  throws Exception
+  {
+    java.io.File root = tempdir.getRoot();
+    java.io.File dbdir = new java.io.File(root,"dic");
+    java.io.File srcdir = new java.io.File(root,"src");
+    createFiles(root,new Object[]{
+	"dic", new Object[]{
+	  Main.CONFIGNAME, new String[]{
+	    "test.src="+root.getAbsolutePath(),
+	  },
+	},
+	"src", new Object[]{
+	  "a", "aa",
+	  "b", "bbb",
+	},
+      });
+    String defs[] = new String[]{
+      "folders-2.conf.xml",
+      "folders.conf",
+      "folders.conf.xml",
+      null,
+    };
+    for ( String def : defs ) {
+      Path exp;
+      if ( def == null ) {
+	def = dbdir.toPath().resolve(Main.CONFIGNAME).toString();
+	exp = Paths.get("dic").resolve("test.src.db");
+      } else {
+	def = DataBase.class
+	  .getClassLoader()
+	  .getResource("mylib/backuper/"+def)
+	  .getPath();
+	exp = Paths.get("work/backuper").resolve(dbdir.toPath()).resolve("Linux.junsei.SSD.db");
+      }
+      try ( DataBase db = new DataBase(dbdir.toPath()) ) {
+	Backup bk = null;
+	if ( def.endsWith(".xml") ) {
+	  bk = db.initializeByXml(Paths.get(def));
+	} else {
+	  db.initializeByFile(Paths.get(def));
+	}
+	Path path = db.findDBFilePath();
+	assertEquals(exp,path);
+      }
+    }
   }
 }

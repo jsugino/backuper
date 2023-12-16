@@ -46,6 +46,7 @@ public class DoubleKeyHashMap<T1, T2, T3> extends HashMap<DoubleKeyHashMap.Pair<
     {
       if ( obj == this ) return true;
       if ( !(obj instanceof Pair) ) return false;
+      @SuppressWarnings("unchecked")
       Pair pair = (Pair)obj;
       return this.key1.equals(pair.key1) && this.key2.equals(pair.key2);
     }
